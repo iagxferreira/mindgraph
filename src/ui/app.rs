@@ -48,6 +48,21 @@ fn draw_header(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
         Span::raw("  "),
         Span::styled("screen: ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(screen_label(app.active_screen)),
+        if matches!(app.active_screen, Screen::Pomodoro) {
+            Span::raw("  ")
+        } else {
+            Span::raw("")
+        },
+        if matches!(app.active_screen, Screen::Pomodoro) {
+            Span::styled("controls: ", Style::default().add_modifier(Modifier::BOLD))
+        } else {
+            Span::raw("")
+        },
+        if matches!(app.active_screen, Screen::Pomodoro) {
+            Span::raw("p pause/resume  s stop/save")
+        } else {
+            Span::raw("")
+        },
         Span::raw("  "),
         Span::styled("tasks: ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(format!("{}", app.tasks.len())),
@@ -147,6 +162,9 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
                 Span::raw("  •  "),
                 Span::styled("j/k", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(": sessions"),
+                Span::raw("  •  "),
+                Span::styled("m", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": mark doing on tasks screen"),
             ]);
         }
         Screen::Workspaces if app.workspace_input_mode.is_some() => {

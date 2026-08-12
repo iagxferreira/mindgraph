@@ -67,7 +67,10 @@ fn render_summary_lines(app: &AppState) -> Vec<Line<'static>> {
             Span::raw(current_task_label(app)),
         ]),
         Line::from(""),
-        Line::from("p start/pause  s stop/save  j/k sessions"),
+        Line::from("controls"),
+        Line::from("  p pause/resume  s stop/save"),
+        Line::from("  j/k browse saved sessions"),
+        Line::from("  m mark a task doing from Tasks"),
     ]
 }
 

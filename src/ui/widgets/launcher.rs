@@ -81,17 +81,7 @@ pub fn draw(frame: &mut Frame<'_>, app: &AppState) {
         .style(style());
     frame.render_stateful_widget(list, sections[1], &mut state);
 
-    let footer = Paragraph::new(Line::from(vec![
-        Span::styled("enter", accent_style()),
-        Span::raw(" run  "),
-        Span::styled("esc", accent_style()),
-        Span::raw(" close  "),
-        Span::styled("j/k", accent_style()),
-        Span::raw(" move  "),
-        Span::styled("backspace", accent_style()),
-        Span::raw(" edit"),
-    ]))
-    .style(style());
+    let footer = Paragraph::new(Line::from(footer_hints(app))).style(style());
     frame.render_widget(footer, sections[2]);
 }
 
@@ -142,6 +132,39 @@ fn highlight_style() -> Style {
         .bg(Color::Rgb(248, 196, 113))
         .fg(Color::Black)
         .add_modifier(Modifier::BOLD)
+}
+
+fn footer_hints(app: &AppState) -> Vec<Span<'static>> {
+    let mut hints = vec![
+        Span::styled("enter", accent_style()),
+        Span::raw(" run  "),
+        Span::styled("esc", accent_style()),
+        Span::raw(" close  "),
+        Span::styled("j/k", accent_style()),
+        Span::raw(" move  "),
+        Span::styled("backspace", accent_style()),
+        Span::raw(" edit"),
+    ];
+
+    if let Some(launcher) = app.launcher.as_ref() {
+        match launcher.screen {
+            Screen::Pomodoro => {
+                hints.push(Span::raw("  •  "));
+                hints.push(Span::styled("p", accent_style()));
+                hints.push(Span::raw(" pause/resume  "));
+                hints.push(Span::styled("s", accent_style()));
+                hints.push(Span::raw(" stop/save"));
+            }
+            Screen::Tasks => {
+                hints.push(Span::raw("  •  "));
+                hints.push(Span::styled("m", accent_style()));
+                hints.push(Span::raw(" mark doing"));
+            }
+            _ => {}
+        }
+    }
+
+    hints
 }
 
 fn screen_label(screen: Screen) -> &'static str {
