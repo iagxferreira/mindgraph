@@ -153,7 +153,16 @@ fn footer_hints(app: &AppState) -> Vec<Span<'static>> {
                 hints.push(Span::styled("p", accent_style()));
                 hints.push(Span::raw(" pause/resume  "));
                 hints.push(Span::styled("s", accent_style()));
-                hints.push(Span::raw(" stop/save"));
+                hints.push(Span::raw(" stop/save  "));
+                hints.push(Span::styled("t", accent_style()));
+                hints.push(Span::raw(" attach task  "));
+                hints.push(Span::styled("c", accent_style()));
+                hints.push(Span::raw(" clear task"));
+            }
+            Screen::Run => {
+                hints.push(Span::raw("  •  "));
+                hints.push(Span::styled("j/k", accent_style()));
+                hints.push(Span::raw(" move work items"));
             }
             Screen::Tasks => {
                 hints.push(Span::raw("  •  "));
@@ -171,6 +180,7 @@ fn screen_label(screen: Screen) -> &'static str {
     match screen {
         Screen::Dashboard => "dashboard",
         Screen::Pomodoro => "pomodoro",
+        Screen::Run => "run",
         Screen::Tasks => "tasks",
         Screen::Mind => "mind",
         Screen::Notifications => "notifications",

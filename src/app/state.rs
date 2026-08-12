@@ -14,10 +14,19 @@ use crate::app::{AppAction, AppEvent};
 pub enum Screen {
     Dashboard,
     Pomodoro,
+    Run,
     Tasks,
     Mind,
     Notifications,
     Workspaces,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum RunState {
+    Idle,
+    Running,
+    Paused,
+    Stopped,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -55,6 +64,24 @@ pub struct Note {
     pub title: String,
     pub slug: String,
     pub path: String,
+    pub created_at_unix: i64,
+    pub updated_at_unix: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkItem {
+    pub id: i64,
+    pub task_id: i64,
+    pub note_id: i64,
+    pub run_state: RunState,
+    #[serde(default)]
+    pub pomodoro_session_id: Option<i64>,
+    #[serde(default)]
+    pub started_at_unix: Option<i64>,
+    #[serde(default)]
+    pub stopped_at_unix: Option<i64>,
+    #[serde(default)]
+    pub elapsed_seconds: u64,
     pub created_at_unix: i64,
     pub updated_at_unix: i64,
 }
@@ -185,6 +212,8 @@ pub enum LauncherTarget {
     ToggleTask,
     ToggleTaskDoing,
     DeleteTask,
+    AttachPomodoroTask,
+    ClearPomodoroTask,
     OpenMindDraft,
     EditMindDraft,
     DeleteMindDraft,
@@ -218,6 +247,8 @@ pub struct AppState {
     pub selected_vault: Option<usize>,
     pub notes: Vec<Note>,
     pub selected_note: Option<usize>,
+    pub work_items: Vec<WorkItem>,
+    pub selected_work_item: Option<usize>,
     pub mind_selection: Option<MindSelection>,
     pub mind_expanded_vaults: BTreeSet<i64>,
     pub mind_path_selection: Option<String>,
@@ -254,6 +285,8 @@ impl AppState {
             selected_vault: None,
             notes: Vec::new(),
             selected_note: None,
+            work_items: Vec::new(),
+            selected_work_item: None,
             mind_selection: None,
             mind_expanded_vaults: BTreeSet::new(),
             mind_path_selection: None,
@@ -303,6 +336,7 @@ impl AppState {
                 AppAction::LoadAllNotes,
                 AppAction::LoadTasks,
                 AppAction::LoadPomodoroSessions,
+                AppAction::LoadWorkItems,
                 AppAction::LoadWorkspaces,
             ],
             AppEvent::Tick => self.tick_pomodoro(),
@@ -335,6 +369,7 @@ impl AppState {
             AppEvent::TasksLoaded(tasks) => {
                 self.tasks = tasks;
                 self.sync_selection();
+                self.sync_pomodoro_task_reference();
                 self.status_line = format!("loaded {} tasks", self.tasks.len());
                 vec![AppAction::None]
             }
@@ -343,6 +378,35 @@ impl AppState {
                 self.sync_pomodoro_session_selection();
                 self.status_line =
                     format!("loaded {} pomodoro sessions", self.pomodoro_sessions.len());
+                vec![AppAction::None]
+            }
+            AppEvent::WorkItemsLoaded(work_items) => {
+                self.work_items = work_items;
+                self.sync_work_item_selection();
+                self.status_line = format!("loaded {} work items", self.work_items.len());
+                vec![AppAction::None]
+            }
+            AppEvent::WorkItemCreated(work_item) => {
+                self.work_items.push(work_item);
+                self.sync_work_item_selection();
+                self.status_line = "work item created".to_string();
+                vec![AppAction::None]
+            }
+            AppEvent::WorkItemUpdated(work_item) => {
+                if let Some(existing) = self
+                    .work_items
+                    .iter_mut()
+                    .find(|current| current.id == work_item.id)
+                {
+                    *existing = work_item;
+                }
+                self.status_line = "work item updated".to_string();
+                vec![AppAction::None]
+            }
+            AppEvent::WorkItemDeleted(work_item_id) => {
+                self.work_items.retain(|item| item.id != work_item_id);
+                self.sync_work_item_selection();
+                self.status_line = "work item deleted".to_string();
                 vec![AppAction::None]
             }
             AppEvent::WorkspacesLoaded(workspaces) => {
@@ -403,6 +467,9 @@ impl AppState {
             AppEvent::TaskDeleted(task_id) => {
                 self.tasks.retain(|task| task.id != task_id);
                 self.sync_selection();
+                if self.pomodoro.task_id == Some(task_id) {
+                    self.pomodoro.task_id = None;
+                }
                 self.clear_task_input();
                 self.status_line = "task deleted".to_string();
                 vec![AppAction::None]
@@ -501,6 +568,7 @@ impl AppState {
                 match self.active_screen {
                     Screen::Mind => self.move_mind_selection(-1),
                     Screen::Pomodoro => self.move_pomodoro_session_selection(-1),
+                    Screen::Run => self.move_work_item_selection(-1),
                     _ => self.move_task_selection(-1),
                 }
                 if self.active_screen == Screen::Mind {
@@ -514,6 +582,7 @@ impl AppState {
                     Screen::Tasks => self.move_task_selection(1),
                     Screen::Mind => self.move_mind_selection(1),
                     Screen::Pomodoro => self.move_pomodoro_session_selection(1),
+                    Screen::Run => self.move_work_item_selection(1),
                     Screen::Workspaces | Screen::Notifications | Screen::Dashboard => {
                         self.move_task_selection(1)
                     }
@@ -553,7 +622,7 @@ impl AppState {
             KeyCode::Char('m') if self.active_screen == Screen::Tasks => {
                 self.toggle_selected_task_doing()
             }
-            KeyCode::Char('t') => {
+            KeyCode::Char('t') if self.active_screen != Screen::Pomodoro => {
                 self.theme = match self.theme {
                     Theme::Ember => Theme::Slate,
                     Theme::Slate => Theme::Ember,
@@ -563,6 +632,12 @@ impl AppState {
             }
             KeyCode::Char('p') if self.active_screen == Screen::Pomodoro => self.toggle_pomodoro(),
             KeyCode::Char('s') if self.active_screen == Screen::Pomodoro => self.stop_pomodoro(),
+            KeyCode::Char('t') if self.active_screen == Screen::Pomodoro => {
+                self.attach_selected_task_to_pomodoro()
+            }
+            KeyCode::Char('c') if self.active_screen == Screen::Pomodoro => {
+                self.clear_pomodoro_task()
+            }
             KeyCode::Char('a') if self.active_screen == Screen::Workspaces => {
                 self.begin_workspace_create()
             }
@@ -614,6 +689,12 @@ impl AppState {
                     }
                     Some(LauncherTarget::DeleteTask) => {
                         return self.delete_selected_task();
+                    }
+                    Some(LauncherTarget::AttachPomodoroTask) => {
+                        return self.attach_selected_task_to_pomodoro();
+                    }
+                    Some(LauncherTarget::ClearPomodoroTask) => {
+                        return self.clear_pomodoro_task();
                     }
                     Some(LauncherTarget::OpenMindDraft) => {
                         self.begin_mind_note();
@@ -849,6 +930,14 @@ impl AppState {
             })
     }
 
+    fn sync_pomodoro_task_reference(&mut self) {
+        if let Some(task_id) = self.pomodoro.task_id
+            && !self.tasks.iter().any(|task| task.id == task_id)
+        {
+            self.pomodoro.task_id = None;
+        }
+    }
+
     fn selected_workspace_id(&self) -> Option<i64> {
         self.selected_workspace
             .and_then(|index| self.workspaces.get(index))
@@ -993,6 +1082,29 @@ impl AppState {
         }
     }
 
+    fn sync_work_item_selection(&mut self) {
+        if self.work_items.is_empty() {
+            self.selected_work_item = None;
+        } else {
+            self.selected_work_item = Some(
+                self.selected_work_item
+                    .unwrap_or(0)
+                    .min(self.work_items.len() - 1),
+            );
+        }
+    }
+
+    fn move_work_item_selection(&mut self, offset: isize) {
+        if self.work_items.is_empty() {
+            self.selected_work_item = None;
+            return;
+        }
+
+        let current = self.selected_work_item.unwrap_or(0) as isize;
+        let next = (current + offset).clamp(0, self.work_items.len().saturating_sub(1) as isize);
+        self.selected_work_item = Some(next as usize);
+    }
+
     fn sync_mind_selection(&mut self) {
         let entries = self.mind_entries();
         if entries.is_empty() {
@@ -1107,6 +1219,49 @@ impl AppState {
             .unwrap_or(true);
 
         vec![AppAction::SetTaskDoing { task_id, doing }]
+    }
+
+    fn attach_selected_task_to_pomodoro(&mut self) -> Vec<AppAction> {
+        let Some(task_id) = self.selected_task_id() else {
+            self.status_line = "select a task first".to_string();
+            return vec![AppAction::None];
+        };
+
+        let mut actions = Vec::new();
+        if let Some(previous_task_id) = self.pomodoro.task_id.filter(|current| *current != task_id)
+        {
+            actions.push(AppAction::SetTaskDoing {
+                task_id: previous_task_id,
+                doing: false,
+            });
+        }
+
+        self.pomodoro.task_id = Some(task_id);
+        actions.push(AppAction::SetTaskDoing {
+            task_id,
+            doing: true,
+        });
+        self.status_line = self
+            .tasks
+            .iter()
+            .find(|task| task.id == task_id)
+            .map(|task| format!("pomodoro attached to {}", task.title))
+            .unwrap_or_else(|| "pomodoro task attached".to_string());
+
+        actions
+    }
+
+    fn clear_pomodoro_task(&mut self) -> Vec<AppAction> {
+        let Some(task_id) = self.pomodoro.task_id.take() else {
+            self.status_line = "no pomodoro task attached".to_string();
+            return vec![AppAction::None];
+        };
+
+        self.status_line = "pomodoro task cleared".to_string();
+        vec![AppAction::SetTaskDoing {
+            task_id,
+            doing: false,
+        }]
     }
 
     fn start_or_resume_pomodoro(&mut self) -> Vec<AppAction> {
@@ -1677,6 +1832,16 @@ impl AppState {
                     hint: "save the current session".to_string(),
                     target: LauncherTarget::ResetPomodoro,
                 },
+                LauncherEntry {
+                    label: "attach task".to_string(),
+                    hint: "use the selected task".to_string(),
+                    target: LauncherTarget::AttachPomodoroTask,
+                },
+                LauncherEntry {
+                    label: "clear task".to_string(),
+                    hint: "detach the current task".to_string(),
+                    target: LauncherTarget::ClearPomodoroTask,
+                },
             ],
             Screen::Tasks => vec![
                 LauncherEntry {
@@ -1739,6 +1904,7 @@ impl AppState {
                 },
             ],
             Screen::Notifications => vec![],
+            Screen::Run => vec![],
             Screen::Workspaces => vec![
                 LauncherEntry {
                     label: "add workspace".to_string(),
@@ -1899,18 +2065,20 @@ fn next_screen(screen: Screen) -> Screen {
         Screen::Mind => Screen::Notifications,
         Screen::Notifications => Screen::Workspaces,
         Screen::Workspaces => Screen::Pomodoro,
-        Screen::Pomodoro => Screen::Dashboard,
+        Screen::Pomodoro => Screen::Run,
+        Screen::Run => Screen::Dashboard,
     }
 }
 
 fn previous_screen(screen: Screen) -> Screen {
     match screen {
-        Screen::Dashboard => Screen::Pomodoro,
+        Screen::Dashboard => Screen::Run,
         Screen::Tasks => Screen::Dashboard,
         Screen::Mind => Screen::Tasks,
         Screen::Notifications => Screen::Mind,
         Screen::Workspaces => Screen::Notifications,
         Screen::Pomodoro => Screen::Workspaces,
+        Screen::Run => Screen::Pomodoro,
     }
 }
 
@@ -1918,6 +2086,7 @@ fn screen_label(screen: Screen) -> &'static str {
     match screen {
         Screen::Dashboard => "dashboard",
         Screen::Pomodoro => "pomodoro",
+        Screen::Run => "run",
         Screen::Tasks => "tasks",
         Screen::Mind => "mind",
         Screen::Notifications => "notifications",
@@ -2031,7 +2200,7 @@ mod tests {
             KeyCode::Char('h'),
             KeyModifiers::CONTROL,
         )));
-        assert_eq!(state.active_screen, Screen::Pomodoro);
+        assert_eq!(state.active_screen, Screen::Run);
     }
 
     #[test]
@@ -2046,6 +2215,7 @@ mod tests {
                 AppAction::LoadAllNotes,
                 AppAction::LoadTasks,
                 AppAction::LoadPomodoroSessions,
+                AppAction::LoadWorkItems,
                 AppAction::LoadWorkspaces
             ]
         ));

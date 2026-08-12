@@ -10,7 +10,8 @@ use mindgraph::{
     app::{AppAction, AppEvent, AppState},
     services::{
         NoteService, NoteServiceImpl, PomodoroService, PomodoroServiceImpl, TaskService,
-        TaskServiceImpl, VaultService, VaultServiceImpl, WorkspaceService, WorkspaceServiceImpl,
+        TaskServiceImpl, VaultService, VaultServiceImpl, WorkItemService, WorkItemServiceImpl,
+        WorkspaceService, WorkspaceServiceImpl,
     },
     storage::database::Database,
     ui,
@@ -40,6 +41,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let vault_service = VaultServiceImpl::new(database.vault_repository());
     let note_service = NoteServiceImpl::new(database.note_repository());
     let pomodoro_service = PomodoroServiceImpl::new(database.pomodoro_repository());
+    let work_item_service = WorkItemServiceImpl::new(database.work_item_repository());
     let task_service = TaskServiceImpl::new(database.task_repository());
     let workspace_service = WorkspaceServiceImpl::new(database.workspace_repository());
 
@@ -50,6 +52,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         &vault_service,
         &note_service,
         &pomodoro_service,
+        &work_item_service,
         &task_service,
         &workspace_service,
         startup_actions,
@@ -70,6 +73,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     &vault_service,
                     &note_service,
                     &pomodoro_service,
+                    &work_item_service,
                     &task_service,
                     &workspace_service,
                     actions,
@@ -85,6 +89,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                             &vault_service,
                             &note_service,
                             &pomodoro_service,
+                            &work_item_service,
                             &task_service,
                             &workspace_service,
                             actions,
@@ -110,6 +115,7 @@ async fn process_actions(
     vault_service: &VaultServiceImpl,
     note_service: &NoteServiceImpl,
     pomodoro_service: &PomodoroServiceImpl,
+    work_item_service: &WorkItemServiceImpl,
     task_service: &TaskServiceImpl,
     workspace_service: &WorkspaceServiceImpl,
     actions: Vec<AppAction>,
@@ -143,6 +149,10 @@ async fn process_actions(
             AppAction::LoadPomodoroSessions => {
                 let sessions = pomodoro_service.list_sessions().await?;
                 app.apply(AppEvent::PomodoroSessionsLoaded(sessions))
+            }
+            AppAction::LoadWorkItems => {
+                let work_items = work_item_service.list_work_items().await?;
+                app.apply(AppEvent::WorkItemsLoaded(work_items))
             }
             AppAction::LoadWorkspaces => {
                 let workspaces = workspace_service.list_workspaces().await?;
@@ -222,6 +232,38 @@ async fn process_actions(
                     )
                     .await?;
                 app.apply(AppEvent::PomodoroSessionCreated(saved))
+            }
+            AppAction::CreateWorkItem { task_id, note_id } => {
+                let work_item = work_item_service.create_work_item(task_id, note_id).await?;
+                app.apply(AppEvent::WorkItemCreated(work_item))
+            }
+            AppAction::UpdateWorkItem {
+                work_item_id,
+                task_id,
+                note_id,
+                run_state,
+                pomodoro_session_id,
+                started_at_unix,
+                stopped_at_unix,
+                elapsed_seconds,
+            } => {
+                let work_item = work_item_service
+                    .update_work_item(
+                        work_item_id,
+                        task_id,
+                        note_id,
+                        run_state,
+                        pomodoro_session_id,
+                        started_at_unix,
+                        stopped_at_unix,
+                        elapsed_seconds,
+                    )
+                    .await?;
+                app.apply(AppEvent::WorkItemUpdated(work_item))
+            }
+            AppAction::DeleteWorkItem { work_item_id } => {
+                work_item_service.delete_work_item(work_item_id).await?;
+                app.apply(AppEvent::WorkItemDeleted(work_item_id))
             }
             AppAction::CreateWorkspace { name, path } => {
                 let workspace = workspace_service.create_workspace(name, path).await?;

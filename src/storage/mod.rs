@@ -5,6 +5,7 @@ pub mod note_repository;
 pub mod pomodoro_repository;
 pub mod task_repository;
 pub mod vault_repository;
+pub mod work_item_repository;
 pub mod workspace_repository;
 
 pub use error::StorageError;

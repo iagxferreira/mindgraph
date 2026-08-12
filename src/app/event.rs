@@ -1,6 +1,6 @@
 use crossterm::event::KeyEvent;
 
-use crate::app::{Note, PomodoroSession, Task, Vault, Workspace};
+use crate::app::{Note, PomodoroSession, RunState, Task, Vault, WorkItem, Workspace};
 
 #[derive(Debug, Clone)]
 pub enum AppEvent {
@@ -13,6 +13,7 @@ pub enum AppEvent {
     NoteDocumentLoaded { note_id: i64, document: String },
     TasksLoaded(Vec<Task>),
     PomodoroSessionsLoaded(Vec<PomodoroSession>),
+    WorkItemsLoaded(Vec<WorkItem>),
     WorkspacesLoaded(Vec<Workspace>),
     NoteCreated(Note),
     NoteUpdated(Note),
@@ -21,6 +22,9 @@ pub enum AppEvent {
     TaskUpdated(Task),
     TaskDeleted(i64),
     PomodoroSessionCreated(PomodoroSession),
+    WorkItemCreated(WorkItem),
+    WorkItemUpdated(WorkItem),
+    WorkItemDeleted(i64),
     WorkspaceCreated(Workspace),
     WorkspaceUpdated(Workspace),
     WorkspaceDeleted(i64),
@@ -34,6 +38,7 @@ pub enum AppAction {
     LoadAllNotes,
     LoadTasks,
     LoadPomodoroSessions,
+    LoadWorkItems,
     LoadWorkspaces,
     CreateNote {
         vault_id: i64,
@@ -80,6 +85,23 @@ pub enum AppAction {
     },
     CreatePomodoroSession {
         session: PomodoroSession,
+    },
+    CreateWorkItem {
+        task_id: i64,
+        note_id: i64,
+    },
+    UpdateWorkItem {
+        work_item_id: i64,
+        task_id: i64,
+        note_id: i64,
+        run_state: RunState,
+        pomodoro_session_id: Option<i64>,
+        started_at_unix: Option<i64>,
+        stopped_at_unix: Option<i64>,
+        elapsed_seconds: u64,
+    },
+    DeleteWorkItem {
+        work_item_id: i64,
     },
     CreateWorkspace {
         name: String,

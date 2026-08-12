@@ -11,7 +11,7 @@ use crate::app::{AppState, PomodoroPhase, Theme};
 pub fn draw(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState) {
     let sections = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(8), Constraint::Min(0)])
+        .constraints([Constraint::Length(11), Constraint::Min(0)])
         .split(area);
 
     let summary = Paragraph::new(render_summary_lines(app))
@@ -63,14 +63,19 @@ fn render_summary_lines(app: &AppState) -> Vec<Line<'static>> {
             Span::raw(format_duration(app.pomodoro.elapsed_seconds.into())),
         ]),
         Line::from(vec![
-            Span::styled("task: ", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(current_task_label(app)),
+            Span::styled("attached: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(attached_task_label(app)),
+        ]),
+        Line::from(""),
+        Line::from(vec![
+            Span::styled("selected: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(selected_task_label(app)),
         ]),
         Line::from(""),
         Line::from("controls"),
         Line::from("  p pause/resume  s stop/save"),
+        Line::from("  t attach selected task  c clear task"),
         Line::from("  j/k browse saved sessions"),
-        Line::from("  m mark a task doing from Tasks"),
     ]
 }
 
@@ -111,7 +116,7 @@ fn render_sessions(app: &AppState) -> Vec<ListItem<'static>> {
         .collect()
 }
 
-fn current_task_label(app: &AppState) -> String {
+fn attached_task_label(app: &AppState) -> String {
     app.pomodoro
         .task_id
         .and_then(|task_id| {
@@ -125,6 +130,20 @@ fn current_task_label(app: &AppState) -> String {
                         format_duration(task.tracked_seconds.min(u64::from(u32::MAX)))
                     )
                 })
+        })
+        .unwrap_or_else(|| "none".to_string())
+}
+
+fn selected_task_label(app: &AppState) -> String {
+    app.selected_task
+        .and_then(|index| app.tasks.get(index))
+        .map(|task| {
+            format!(
+                "{} ({} tracked, {})",
+                task.title,
+                format_duration(task.tracked_seconds.min(u64::from(u32::MAX))),
+                if task.doing { "doing" } else { "not doing" }
+            )
         })
         .unwrap_or_else(|| "none".to_string())
 }
