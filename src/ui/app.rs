@@ -2,8 +2,8 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     symbols,
-    text::Line,
-    widgets::{block::Title, Block, Borders, Tabs},
+    text::{Line, Span},
+    widgets::{block::Title, Block, Borders, Paragraph, Tabs},
     Frame,
 };
 
@@ -16,7 +16,7 @@ pub fn draw(frame: &mut Frame<'_>, app: &AppState) {
     let root = frame.area();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(1)])
+        .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(2)])
         .split(root);
 
     draw_header(frame, chunks[0], app);
@@ -28,7 +28,7 @@ pub fn draw(frame: &mut Frame<'_>, app: &AppState) {
         Screen::Workspaces => dashboard::draw(frame, chunks[1], app),
     }
 
-    draw_footer(frame, chunks[2], app);
+    draw_command_bar(frame, chunks[2], app);
 }
 
 fn draw_header(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
@@ -56,11 +56,68 @@ fn draw_header(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
     frame.render_widget(tabs, area);
 }
 
-fn draw_footer(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
-    let footer = Block::default()
-        .borders(Borders::TOP)
-        .title(Line::from(app.status_line.clone()));
-    frame.render_widget(footer, area);
+fn draw_command_bar(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
+    let commands = command_hints(app.active_screen);
+    let bar = Paragraph::new(Line::from(commands))
+        .block(
+            Block::default()
+                .borders(Borders::TOP)
+                .title(Line::from(vec![
+                    Span::styled("Status: ", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::raw(app.status_line.clone()),
+                ])),
+        )
+        .style(inactive_style(app.theme));
+
+    frame.render_widget(bar, area);
+}
+
+fn command_hints(screen: Screen) -> Vec<Span<'static>> {
+    let mut hints = vec![
+        Span::styled("Tab", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(": switch screen"),
+        Span::raw("  •  "),
+        Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(": quit"),
+    ];
+
+    match screen {
+        Screen::Tasks => {
+            hints.extend([
+                Span::raw("  •  "),
+                Span::styled("j/k", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": move"),
+                Span::raw("  •  "),
+                Span::styled("space", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": toggle"),
+                Span::raw("  •  "),
+                Span::styled("a", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": add"),
+                Span::raw("  •  "),
+                Span::styled("d", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": delete"),
+                Span::raw("  •  "),
+                Span::styled("t", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": theme"),
+            ]);
+        }
+        Screen::Dashboard => {
+            hints.extend([
+                Span::raw("  •  "),
+                Span::styled("t", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": theme"),
+            ]);
+        }
+        Screen::Notifications | Screen::Workspaces => {
+            hints.extend([
+                Span::raw("  •  "),
+                Span::styled("j/k", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": move"),
+            ]);
+        }
+    }
+
+    hints
 }
 
 fn active_style(theme: Theme) -> Style {
