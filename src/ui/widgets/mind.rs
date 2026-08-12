@@ -5,6 +5,7 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
+use std::path::Path;
 
 use crate::{
     app::{AppState, MindDraft, MindDraftMode, MindSelection, Note},
@@ -73,7 +74,7 @@ fn draw_tree(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState
                     panel_style(app.theme)
                 };
 
-                let preview = first_non_empty_line(&note.content).unwrap_or_default();
+                let preview = file_name(&note.path).unwrap_or_else(|| note.slug.clone());
                 let summary = if preview.is_empty() {
                     note.title.clone()
                 } else {
@@ -102,7 +103,7 @@ fn draw_panel(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppStat
     }
 
     let body = match selected_note(app) {
-        Some(note) => render_note_lines(note),
+        Some(note) => render_note_lines(note, app.mind_document.as_deref()),
         None => {
             if app.vaults.is_empty() {
                 vec![
@@ -177,13 +178,7 @@ fn draw_editor(
     frame.render_widget(editor, area);
 }
 
-fn render_note_lines(note: &Note) -> Vec<Line<'static>> {
-    let content = if note.content.trim().is_empty() {
-        "no markdown content yet".to_string()
-    } else {
-        note.content.clone()
-    };
-
+fn render_note_lines(note: &Note, document: Option<&str>) -> Vec<Line<'static>> {
     let mut lines = vec![
         Line::from(vec![
             Span::styled("title: ", Style::default().add_modifier(Modifier::BOLD)),
@@ -199,13 +194,18 @@ fn render_note_lines(note: &Note) -> Vec<Line<'static>> {
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("content: ", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw("markdown"),
+            Span::styled("path: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(note.path.clone()),
         ]),
         Line::from(""),
     ];
 
-    lines.extend(content.lines().map(|line| Line::from(line.to_string())));
+    let content = document.unwrap_or("document not loaded yet");
+    if content.trim().is_empty() {
+        lines.push(Line::from("no markdown content yet"));
+    } else {
+        lines.extend(content.lines().map(|line| Line::from(line.to_string())));
+    }
     lines.push(Line::from(""));
     lines.push(Line::from("e edit  d delete  h/l tree  ctrl+l next tab"));
     lines
@@ -239,9 +239,9 @@ fn vault_name(app: &AppState, vault_id: i64) -> Option<String> {
         .map(|vault| vault.name.clone())
 }
 
-fn first_non_empty_line(content: &str) -> Option<String> {
-    content
-        .lines()
-        .find(|line| !line.trim().is_empty())
-        .map(|line| line.trim().to_string())
+fn file_name(path: &str) -> Option<String> {
+    Path::new(path)
+        .file_name()
+        .and_then(|name| name.to_str())
+        .map(|name| name.to_string())
 }

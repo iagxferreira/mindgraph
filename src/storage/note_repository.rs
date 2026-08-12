@@ -1,4 +1,7 @@
-use std::path::PathBuf;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use crate::{
     app::{Note, current_unix_timestamp},
@@ -51,16 +54,21 @@ impl NoteRepository {
         vault_id: i64,
         title: String,
         slug: String,
-        content: String,
+        document: String,
     ) -> Result<Note, StorageError> {
         let now = current_unix_timestamp();
         let mut data = load_data(&self.root_dir)?;
+        let vault_root = vault_root_path(&data, vault_id)?;
+        let note_id = data.allocate_note_id();
+        let path = note_file_path(&vault_root, &slug, note_id);
+        write_document(&path, &document)?;
+
         let note = Note {
-            id: data.allocate_note_id(),
+            id: note_id,
             vault_id,
             title,
             slug,
-            content,
+            path: path.to_string_lossy().into_owned(),
             created_at_unix: now,
             updated_at_unix: now,
         };
@@ -74,29 +82,43 @@ impl NoteRepository {
         note_id: i64,
         title: String,
         slug: String,
-        content: String,
+        document: String,
     ) -> Result<Note, StorageError> {
         let mut data = load_data(&self.root_dir)?;
-        let note = data
+        let (vault_id, current_path) = data
             .notes
-            .iter_mut()
+            .iter()
             .find(|current| current.id == note_id)
+            .map(|note| (note.vault_id, note.path.clone()))
             .ok_or(StorageError::NotFound {
                 entity: "note",
                 id: note_id,
             })?;
+
+        let vault_root = vault_root_path(&data, vault_id)?;
+        let next_path = note_file_path(&vault_root, &slug, note_id);
+        move_note_file(Path::new(&current_path), &next_path)?;
+        write_document(&next_path, &document)?;
+
+        let note = data
+            .notes
+            .iter_mut()
+            .find(|current| current.id == note_id)
+            .expect("note must exist after lookup");
         note.title = title;
         note.slug = slug;
-        note.content = content;
+        note.path = next_path.to_string_lossy().into_owned();
         note.updated_at_unix = current_unix_timestamp();
-        let updated = note.clone();
+        let note = note.clone();
+
         save_data(&self.root_dir, &data)?;
-        Ok(updated)
+        Ok(note)
     }
 
     pub async fn delete_note(&self, note_id: i64) -> Result<(), StorageError> {
         let mut data = load_data(&self.root_dir)?;
         let initial_len = data.notes.len();
+        let removed_note = data.notes.iter().find(|note| note.id == note_id).cloned();
         data.notes.retain(|note| note.id != note_id);
 
         if data.notes.len() == initial_len {
@@ -106,11 +128,66 @@ impl NoteRepository {
             });
         }
 
+        if let Some(note) = removed_note {
+            let path = PathBuf::from(note.path);
+            if path.exists() {
+                fs::remove_file(path)?;
+            }
+        }
+
         data.links
             .retain(|link| link.source_note_id != note_id && link.target_note_id != note_id);
         save_data(&self.root_dir, &data)?;
         Ok(())
     }
+
+    pub async fn read_note_document(&self, path: String) -> Result<String, StorageError> {
+        Ok(fs::read_to_string(path)?)
+    }
+}
+
+fn vault_root_path(
+    data: &crate::storage::database::StorageData,
+    vault_id: i64,
+) -> Result<PathBuf, StorageError> {
+    data.vaults
+        .iter()
+        .find(|vault| vault.id == vault_id)
+        .map(|vault| PathBuf::from(&vault.root_path))
+        .ok_or(StorageError::NotFound {
+            entity: "vault",
+            id: vault_id,
+        })
+}
+
+fn note_file_path(vault_root: &Path, slug: &str, note_id: i64) -> PathBuf {
+    vault_root
+        .join("notes")
+        .join(format!("{slug}-{note_id}.md"))
+}
+
+fn write_document(path: &Path, document: &str) -> Result<(), StorageError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(path, document)?;
+    Ok(())
+}
+
+fn move_note_file(previous: &Path, next: &Path) -> Result<(), StorageError> {
+    if previous == next {
+        return Ok(());
+    }
+
+    if let Some(parent) = next.parent() {
+        fs::create_dir_all(parent)?;
+    }
+
+    if previous.exists() {
+        fs::rename(previous, next)?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
@@ -139,6 +216,7 @@ mod tests {
         assert_eq!(created.vault_id, 1);
         assert_eq!(created.title, "Rust");
         assert_eq!(created.slug, "rust");
+        assert!(Path::new(&created.path).exists());
 
         let updated = repository
             .update_note(
@@ -151,9 +229,16 @@ mod tests {
             .expect("update note");
         assert_eq!(updated.title, "Rust language");
         assert_eq!(updated.slug, "rust-language");
+        assert!(Path::new(&updated.path).exists());
 
         let notes = repository.list_notes_by_vault(1).await.expect("list");
         assert_eq!(notes.len(), 1);
-        assert_eq!(notes[0].content, "Rust powers tools.");
+        assert_eq!(
+            repository
+                .read_note_document(updated.path.clone())
+                .await
+                .expect("read note"),
+            "Rust powers tools."
+        );
     }
 }

@@ -21,16 +21,17 @@ pub trait NoteService: Send + Sync {
         vault_id: i64,
         title: String,
         slug: String,
-        content: String,
+        document: String,
     ) -> Result<Note, ServiceError>;
     async fn update_note(
         &self,
         note_id: i64,
         title: String,
         slug: String,
-        content: String,
+        document: String,
     ) -> Result<Note, ServiceError>;
     async fn delete_note(&self, note_id: i64) -> Result<(), ServiceError>;
+    async fn read_note_document(&self, path: String) -> Result<String, ServiceError>;
 }
 
 #[derive(Clone)]
@@ -59,11 +60,11 @@ impl NoteService for NoteServiceImpl {
         vault_id: i64,
         title: String,
         slug: String,
-        content: String,
+        document: String,
     ) -> Result<Note, ServiceError> {
         Ok(self
             .repository
-            .create_note(vault_id, title, slug, content)
+            .create_note(vault_id, title, slug, document)
             .await?)
     }
 
@@ -72,16 +73,20 @@ impl NoteService for NoteServiceImpl {
         note_id: i64,
         title: String,
         slug: String,
-        content: String,
+        document: String,
     ) -> Result<Note, ServiceError> {
         Ok(self
             .repository
-            .update_note(note_id, title, slug, content)
+            .update_note(note_id, title, slug, document)
             .await?)
     }
 
     async fn delete_note(&self, note_id: i64) -> Result<(), ServiceError> {
         self.repository.delete_note(note_id).await?;
         Ok(())
+    }
+
+    async fn read_note_document(&self, path: String) -> Result<String, ServiceError> {
+        Ok(self.repository.read_note_document(path).await?)
     }
 }

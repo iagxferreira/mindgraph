@@ -90,6 +90,31 @@ pub struct StorageData {
     pub next_link_id: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LegacyStorageData {
+    pub tasks: Vec<Task>,
+    pub workspaces: Vec<Workspace>,
+    pub vaults: Vec<Vault>,
+    pub notes: Vec<LegacyNote>,
+    pub links: Vec<Link>,
+    pub next_task_id: i64,
+    pub next_workspace_id: i64,
+    pub next_vault_id: i64,
+    pub next_note_id: i64,
+    pub next_link_id: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct LegacyNote {
+    pub id: i64,
+    pub vault_id: i64,
+    pub title: String,
+    pub slug: String,
+    pub content: String,
+    pub created_at_unix: i64,
+    pub updated_at_unix: i64,
+}
+
 impl StorageData {
     pub(crate) fn normalize_counters(&mut self) {
         self.next_task_id = self
@@ -212,9 +237,16 @@ pub(crate) fn load_data(root_dir: &Path) -> Result<StorageData, StorageError> {
         return Ok(StorageData::default());
     }
 
-    let mut data: StorageData = read_json(&path)?;
-    data.normalize_counters();
-    Ok(data)
+    match read_json::<StorageData>(&path) {
+        Ok(mut data) => {
+            data.normalize_counters();
+            Ok(data)
+        }
+        Err(storage_error) => match read_json::<LegacyStorageData>(&path) {
+            Ok(legacy) => migrate_legacy_data(root_dir, legacy),
+            Err(_) => Err(storage_error),
+        },
+    }
 }
 
 pub(crate) fn save_data(root_dir: &Path, data: &StorageData) -> Result<(), StorageError> {
@@ -258,4 +290,58 @@ where
     let contents = serde_json::to_string_pretty(value)?;
     fs::write(path, contents)?;
     Ok(())
+}
+
+fn migrate_legacy_data(
+    root_dir: &Path,
+    legacy: LegacyStorageData,
+) -> Result<StorageData, StorageError> {
+    let mut data = StorageData {
+        tasks: legacy.tasks,
+        workspaces: legacy.workspaces,
+        vaults: legacy.vaults,
+        notes: Vec::with_capacity(legacy.notes.len()),
+        links: legacy.links,
+        next_task_id: legacy.next_task_id,
+        next_workspace_id: legacy.next_workspace_id,
+        next_vault_id: legacy.next_vault_id,
+        next_note_id: legacy.next_note_id,
+        next_link_id: legacy.next_link_id,
+    };
+
+    for note in legacy.notes {
+        let vault_root = data
+            .vaults
+            .iter()
+            .find(|vault| vault.id == note.vault_id)
+            .map(|vault| PathBuf::from(&vault.root_path))
+            .ok_or(StorageError::NotFound {
+                entity: "vault",
+                id: note.vault_id,
+            })?;
+        let path = note_file_path(&vault_root, &note.slug, note.id);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        fs::write(&path, note.content)?;
+        data.notes.push(Note {
+            id: note.id,
+            vault_id: note.vault_id,
+            title: note.title,
+            slug: note.slug,
+            path: path.to_string_lossy().into_owned(),
+            created_at_unix: note.created_at_unix,
+            updated_at_unix: note.updated_at_unix,
+        });
+    }
+
+    data.normalize_counters();
+    save_data(root_dir, &data)?;
+    Ok(data)
+}
+
+fn note_file_path(vault_root: &Path, slug: &str, note_id: i64) -> PathBuf {
+    vault_root
+        .join("notes")
+        .join(format!("{slug}-{note_id}.md"))
 }

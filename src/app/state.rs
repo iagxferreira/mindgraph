@@ -47,7 +47,7 @@ pub struct Note {
     pub vault_id: i64,
     pub title: String,
     pub slug: String,
-    pub content: String,
+    pub path: String,
     pub created_at_unix: i64,
     pub updated_at_unix: i64,
 }
@@ -183,6 +183,7 @@ pub struct AppState {
     pub selected_note: Option<usize>,
     pub mind_selection: Option<MindSelection>,
     pub mind_expanded_vaults: BTreeSet<i64>,
+    pub mind_document: Option<String>,
     pub tasks: Vec<Task>,
     pub notifications: Vec<String>,
     pub workspaces: Vec<Workspace>,
@@ -214,6 +215,7 @@ impl AppState {
             selected_note: None,
             mind_selection: None,
             mind_expanded_vaults: BTreeSet::new(),
+            mind_document: None,
             tasks: Vec::new(),
             notifications: Vec::new(),
             workspaces: vec![Workspace {
@@ -273,7 +275,16 @@ impl AppState {
                 self.notes = notes;
                 self.sort_notes();
                 self.sync_mind_selection();
+                self.mind_document = None;
                 self.status_line = format!("loaded {} notes", self.notes.len());
+                self.selected_mind_note_path()
+                    .map(|path| vec![AppAction::LoadNoteDocument { path }])
+                    .unwrap_or_else(|| vec![AppAction::None])
+            }
+            AppEvent::NoteDocumentLoaded { note_id, document } => {
+                if self.selected_mind_note_id() == Some(note_id) {
+                    self.mind_document = Some(document);
+                }
                 vec![AppAction::None]
             }
             AppEvent::TasksLoaded(tasks) => {
@@ -292,11 +303,11 @@ impl AppState {
                 let note_id = note.id;
                 self.notes.push(note);
                 self.sort_notes();
-                self.clear_mind_draft();
                 self.mind_selection = Some(MindSelection::Note { note_id });
                 self.sync_mind_selection();
+                self.clear_mind_draft();
                 self.status_line = "note created".to_string();
-                vec![AppAction::None]
+                self.sync_mind_document_action()
             }
             AppEvent::NoteUpdated(note) => {
                 let note_id = note.id;
@@ -305,18 +316,21 @@ impl AppState {
                     *existing = note;
                 }
                 self.sort_notes();
-                self.clear_mind_draft();
                 self.mind_selection = Some(MindSelection::Note { note_id });
                 self.sync_mind_selection();
+                self.clear_mind_draft();
                 self.status_line = "note updated".to_string();
-                vec![AppAction::None]
+                self.sync_mind_document_action()
             }
             AppEvent::NoteDeleted(note_id) => {
                 self.notes.retain(|note| note.id != note_id);
                 self.sync_mind_selection();
                 self.clear_mind_draft();
+                if self.selected_mind_note_id().is_none() {
+                    self.mind_document = None;
+                }
                 self.status_line = "note deleted".to_string();
-                vec![AppAction::None]
+                self.sync_mind_document_action()
             }
             AppEvent::TaskCreated(task) => {
                 self.tasks.push(task);
@@ -429,7 +443,11 @@ impl AppState {
                     Screen::Mind => self.move_mind_selection(-1),
                     _ => self.move_task_selection(-1),
                 }
-                vec![AppAction::None]
+                if self.active_screen == Screen::Mind {
+                    self.sync_mind_document_action()
+                } else {
+                    vec![AppAction::None]
+                }
             }
             KeyCode::Down | KeyCode::Char('j') => {
                 match self.active_screen {
@@ -439,7 +457,11 @@ impl AppState {
                         self.move_task_selection(1)
                     }
                 }
-                vec![AppAction::None]
+                if self.active_screen == Screen::Mind {
+                    self.sync_mind_document_action()
+                } else {
+                    vec![AppAction::None]
+                }
             }
             KeyCode::Char(' ') if self.active_screen == Screen::Tasks => self
                 .selected_task_id()
@@ -447,7 +469,10 @@ impl AppState {
                 .unwrap_or_else(|| vec![AppAction::None]),
             KeyCode::Char('a') if self.active_screen == Screen::Mind => {
                 if let Some(vault_id) = self.selected_mind_vault_id() {
-                    self.begin_mind_draft(MindDraftMode::Creating { vault_id }, "# Untitled\n\n".to_string());
+                    self.begin_mind_draft(
+                        MindDraftMode::Creating { vault_id },
+                        "# Untitled\n\n".to_string(),
+                    );
                 } else {
                     self.status_line = "select a vault first".to_string();
                 }
@@ -460,13 +485,15 @@ impl AppState {
                         if let Some(note) = self.notes.iter().find(|note| note.id == note_id) {
                             self.begin_mind_draft(
                                 MindDraftMode::Editing { note_id },
-                                markdown_note_document_from(note),
+                                self.mind_document
+                                    .clone()
+                                    .unwrap_or_else(|| markdown_note_document_from(note)),
                             );
                         }
                     }
                     None => {}
                 }
-                vec![AppAction::None]
+                self.sync_mind_document_action()
             }
             KeyCode::Char('d') if self.active_screen == Screen::Mind => self
                 .selected_mind_note_id()
@@ -817,6 +844,17 @@ impl AppState {
         }
     }
 
+    fn selected_mind_note_path(&self) -> Option<String> {
+        match self.selected_mind_entry() {
+            Some(MindTreeEntry::Note { note_id, .. }) => self
+                .notes
+                .iter()
+                .find(|note| note.id == note_id)
+                .map(|note| note.path.clone()),
+            _ => None,
+        }
+    }
+
     fn mind_entries(&self) -> Vec<MindTreeEntry> {
         let mut entries = Vec::with_capacity(self.vaults.len().saturating_mul(2));
 
@@ -925,6 +963,7 @@ impl AppState {
         let entries = self.mind_entries();
         if entries.is_empty() {
             self.mind_selection = None;
+            self.mind_document = None;
             return;
         }
 
@@ -934,6 +973,16 @@ impl AppState {
             .unwrap_or(0) as isize;
         let next = (current_index + offset).clamp(0, entries.len().saturating_sub(1) as isize);
         self.mind_selection = Some(entries[next as usize].selection());
+    }
+
+    fn sync_mind_document_action(&mut self) -> Vec<AppAction> {
+        match self.selected_mind_note_path() {
+            Some(path) => vec![AppAction::LoadNoteDocument { path }],
+            None => {
+                self.mind_document = None;
+                vec![AppAction::None]
+            }
+        }
     }
 
     fn toggle_mind_vault(&mut self, vault_id: i64) {
@@ -1053,20 +1102,20 @@ impl AppState {
             KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                 let title = markdown_note_title(&draft.document);
                 let slug = slugify(&title);
-                let content = draft.document.clone();
+                let document = draft.document.clone();
 
                 match draft.mode.clone() {
                     MindDraftMode::Creating { vault_id } => vec![AppAction::CreateNote {
                         vault_id,
                         title,
                         slug,
-                        content,
+                        document,
                     }],
                     MindDraftMode::Editing { note_id } => vec![AppAction::UpdateNote {
                         note_id,
                         title,
                         slug,
-                        content,
+                        document,
                     }],
                 }
             }
@@ -1328,13 +1377,7 @@ fn markdown_note_title(document: &str) -> String {
 }
 
 fn markdown_note_document_from(note: &Note) -> String {
-    if note.content.trim_start().starts_with("# ") {
-        note.content.clone()
-    } else if note.content.trim().is_empty() {
-        format!("# {}\n\n", note.title)
-    } else {
-        format!("# {}\n\n{}", note.title, note.content)
-    }
+    format!("# {}\n\n", note.title)
 }
 
 fn slugify(input: &str) -> String {

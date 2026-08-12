@@ -121,6 +121,16 @@ async fn process_actions(
                 let notes = note_service.list_all_notes().await?;
                 app.apply(AppEvent::NotesLoaded(notes))
             }
+            AppAction::LoadNoteDocument { path } => {
+                let document = note_service.read_note_document(path.clone()).await?;
+                let note_id = app
+                    .notes
+                    .iter()
+                    .find(|note| note.path == path)
+                    .map(|note| note.id)
+                    .unwrap_or_default();
+                app.apply(AppEvent::NoteDocumentLoaded { note_id, document })
+            }
             AppAction::LoadTasks => {
                 let tasks = task_service.list_tasks().await?;
                 app.apply(AppEvent::TasksLoaded(tasks))
@@ -133,10 +143,10 @@ async fn process_actions(
                 vault_id,
                 title,
                 slug,
-                content,
+                document,
             } => {
                 let note = note_service
-                    .create_note(vault_id, title, slug, content)
+                    .create_note(vault_id, title, slug, document)
                     .await?;
                 app.apply(AppEvent::NoteCreated(note))
             }
@@ -144,10 +154,10 @@ async fn process_actions(
                 note_id,
                 title,
                 slug,
-                content,
+                document,
             } => {
                 let note = note_service
-                    .update_note(note_id, title, slug, content)
+                    .update_note(note_id, title, slug, document)
                     .await?;
                 app.apply(AppEvent::NoteUpdated(note))
             }

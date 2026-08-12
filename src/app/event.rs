@@ -10,6 +10,7 @@ pub enum AppEvent {
     Key(KeyEvent),
     VaultsLoaded(Vec<Vault>),
     NotesLoaded(Vec<Note>),
+    NoteDocumentLoaded { note_id: i64, document: String },
     TasksLoaded(Vec<Task>),
     WorkspacesLoaded(Vec<Workspace>),
     NoteCreated(Note),
@@ -35,16 +36,19 @@ pub enum AppAction {
         vault_id: i64,
         title: String,
         slug: String,
-        content: String,
+        document: String,
     },
     UpdateNote {
         note_id: i64,
         title: String,
         slug: String,
-        content: String,
+        document: String,
     },
     DeleteNote {
         note_id: i64,
+    },
+    LoadNoteDocument {
+        path: String,
     },
     CreateTask {
         title: String,
