@@ -21,11 +21,6 @@ pub struct Database {
 impl Database {
     pub async fn open_default() -> Result<Self, StorageError> {
         let root_dir = default_root_dir();
-        if let Some(legacy_root_dir) = legacy_root_dir() {
-            if !root_dir.exists() && legacy_root_dir.exists() && legacy_root_dir != root_dir {
-                migrate_legacy_storage(&legacy_root_dir, &root_dir)?;
-            }
-        }
         Self::open_at(root_dir).await
     }
 
@@ -241,46 +236,6 @@ fn default_root_dir() -> PathBuf {
     let mut path = env::current_dir().unwrap_or_else(|_| env::temp_dir());
     path.push(".mindgraph");
     path
-}
-
-fn legacy_root_dir() -> Option<PathBuf> {
-    env::current_dir().ok().map(|current_dir| current_dir.join(".mindgraph"))
-}
-
-fn migrate_legacy_storage(source: &Path, target: &Path) -> Result<(), StorageError> {
-    if target.exists() {
-        return Ok(());
-    }
-
-    if let Some(parent) = target.parent() {
-        fs::create_dir_all(parent)?;
-    }
-
-    match fs::rename(source, target) {
-        Ok(()) => Ok(()),
-        Err(_) => {
-            copy_dir_all(source, target)?;
-            Ok(())
-        }
-    }
-}
-
-fn copy_dir_all(source: &Path, target: &Path) -> Result<(), StorageError> {
-    fs::create_dir_all(target)?;
-
-    for entry in fs::read_dir(source)? {
-        let entry = entry?;
-        let entry_path = entry.path();
-        let target_path = target.join(entry.file_name());
-
-        if entry.file_type()?.is_dir() {
-            copy_dir_all(&entry_path, &target_path)?;
-        } else {
-            fs::copy(&entry_path, &target_path)?;
-        }
-    }
-
-    Ok(())
 }
 
 fn read_json<T>(path: &Path) -> Result<T, StorageError>
