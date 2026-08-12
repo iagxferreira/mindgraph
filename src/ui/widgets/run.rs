@@ -6,7 +6,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::{AppState, RunState, WorkItem},
+    app::{AppState, PomodoroSession, RunState, WorkItem},
     ui::widgets::master_detail,
 };
 
@@ -71,9 +71,11 @@ fn render_details_lines(app: &AppState, work_item: &WorkItem) -> Vec<Line<'stati
     let task_title = resolve_task_title(app, work_item.task_id);
     let note_title = resolve_note_title(app, work_item.note_id);
     let pomodoro_label = work_item
-        .pomodoro_session_id
+        .pomodoro_session_ids
+        .last()
         .map(|session_id| format!("session #{session_id}"))
         .unwrap_or_else(|| "none".to_string());
+    let session_count = work_item.pomodoro_session_ids.len();
 
     vec![
         Line::from(vec![
@@ -93,6 +95,10 @@ fn render_details_lines(app: &AppState, work_item: &WorkItem) -> Vec<Line<'stati
             Span::raw(pomodoro_label),
         ]),
         Line::from(vec![
+            Span::styled("sessions: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(format!("{session_count} total")),
+        ]),
+        Line::from(vec![
             Span::styled("elapsed: ", Style::default().add_modifier(Modifier::BOLD)),
             Span::raw(format_duration(work_item.elapsed_seconds)),
         ]),
@@ -105,8 +111,42 @@ fn render_details_lines(app: &AppState, work_item: &WorkItem) -> Vec<Line<'stati
             Span::raw(format_timestamp(work_item.stopped_at_unix)),
         ]),
         Line::from(""),
+        Line::from(render_session_lines(app, work_item)),
+        Line::from(""),
         Line::from("j/k move  enter select  use launcher for edits"),
     ]
+}
+
+fn render_session_lines(app: &AppState, work_item: &WorkItem) -> String {
+    let mut labels = Vec::new();
+    for session_id in &work_item.pomodoro_session_ids {
+        let label = app
+            .pomodoro_sessions
+            .iter()
+            .find(|session| session.id == *session_id)
+            .map(render_session_label)
+            .unwrap_or_else(|| format!("session #{session_id}"));
+        labels.push(label);
+    }
+
+    if labels.is_empty() {
+        "related sessions: none".to_string()
+    } else {
+        format!("related sessions: {}", labels.join(", "))
+    }
+}
+
+fn render_session_label(session: &PomodoroSession) -> String {
+    let phase = match session.phase {
+        crate::app::PomodoroPhase::Work => "work",
+        crate::app::PomodoroPhase::Break => "break",
+    };
+
+    format!(
+        "#{id} {phase} {duration}",
+        id = session.id,
+        duration = format_duration(u64::from(session.elapsed_seconds))
+    )
 }
 
 fn resolve_task_title(app: &AppState, task_id: i64) -> String {

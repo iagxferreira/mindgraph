@@ -248,18 +248,14 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
         Screen::Dashboard => {
             hints.extend([
                 Span::raw("  •  "),
-                Span::styled("p", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(if app.pomodoro.running {
-                    ": pause pomodoro"
-                } else {
-                    ": start pomodoro"
-                }),
+                Span::styled("j/k", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": move work items"),
                 Span::raw("  •  "),
-                Span::styled("s", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(": stop pomodoro"),
+                Span::styled("enter", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": open run"),
                 Span::raw("  •  "),
-                Span::styled("t", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(": theme"),
+                Span::styled(":", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(" scoped menu"),
             ]);
         }
         Screen::Notifications | Screen::Workspaces => {

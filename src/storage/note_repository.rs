@@ -1,6 +1,6 @@
 use std::{
-    io::ErrorKind,
     fs,
+    io::ErrorKind,
     path::{Path, PathBuf},
 };
 

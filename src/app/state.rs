@@ -74,8 +74,13 @@ pub struct WorkItem {
     pub task_id: i64,
     pub note_id: i64,
     pub run_state: RunState,
-    #[serde(default)]
-    pub pomodoro_session_id: Option<i64>,
+    #[serde(
+        default,
+        alias = "pomodoro_session_id",
+        deserialize_with = "deserialize_pomodoro_session_ids",
+        skip_serializing_if = "Vec::is_empty"
+    )]
+    pub pomodoro_session_ids: Vec<i64>,
     #[serde(default)]
     pub started_at_unix: Option<i64>,
     #[serde(default)]
@@ -84,6 +89,25 @@ pub struct WorkItem {
     pub elapsed_seconds: u64,
     pub created_at_unix: i64,
     pub updated_at_unix: i64,
+}
+
+fn deserialize_pomodoro_session_ids<'de, D>(deserializer: D) -> Result<Vec<i64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum PomodoroSessionIds {
+        Many(Vec<i64>),
+        One(i64),
+    }
+
+    let value = Option::<PomodoroSessionIds>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(PomodoroSessionIds::Many(ids)) => ids,
+        Some(PomodoroSessionIds::One(id)) => vec![id],
+        None => Vec::new(),
+    })
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -398,8 +422,10 @@ impl AppState {
                 let work_item_id = work_item.id;
                 self.work_items.push(work_item);
                 self.sort_work_items();
-                self.selected_work_item =
-                    self.work_items.iter().position(|item| item.id == work_item_id);
+                self.selected_work_item = self
+                    .work_items
+                    .iter()
+                    .position(|item| item.id == work_item_id);
                 self.status_line = "work item created".to_string();
                 vec![AppAction::None]
             }
@@ -488,11 +514,30 @@ impl AppState {
                 vec![AppAction::None]
             }
             AppEvent::PomodoroSessionCreated(session) => {
+                let session_id = session.id;
                 self.pomodoro_sessions.push(session);
                 self.sort_pomodoro_sessions();
                 self.sync_pomodoro_session_selection();
                 self.status_line = "pomodoro saved".to_string();
-                vec![AppAction::None]
+                let mut actions = vec![AppAction::None];
+                if let Some(work_item_id) = self.selected_work_item_id()
+                    && let Some(index) = self.selected_work_item
+                    && let Some(work_item) = self.work_items.get(index)
+                {
+                    let mut pomodoro_session_ids = work_item.pomodoro_session_ids.clone();
+                    pomodoro_session_ids.push(session_id);
+                    actions.push(AppAction::UpdateWorkItem {
+                        work_item_id,
+                        task_id: work_item.task_id,
+                        note_id: work_item.note_id,
+                        run_state: work_item.run_state,
+                        pomodoro_session_ids,
+                        started_at_unix: work_item.started_at_unix,
+                        stopped_at_unix: work_item.stopped_at_unix,
+                        elapsed_seconds: work_item.elapsed_seconds,
+                    });
+                }
+                actions
             }
             AppEvent::WorkspaceCreated(workspace) => {
                 self.workspaces.push(workspace);
@@ -582,6 +627,7 @@ impl AppState {
                     Screen::Mind => self.move_mind_selection(-1),
                     Screen::Pomodoro => self.move_pomodoro_session_selection(-1),
                     Screen::Run => self.move_work_item_selection(-1),
+                    Screen::Dashboard => self.move_work_item_selection(-1),
                     _ => self.move_task_selection(-1),
                 }
                 if self.active_screen == Screen::Mind {
@@ -596,9 +642,8 @@ impl AppState {
                     Screen::Mind => self.move_mind_selection(1),
                     Screen::Pomodoro => self.move_pomodoro_session_selection(1),
                     Screen::Run => self.move_work_item_selection(1),
-                    Screen::Workspaces | Screen::Notifications | Screen::Dashboard => {
-                        self.move_task_selection(1)
-                    }
+                    Screen::Dashboard => self.move_work_item_selection(1),
+                    Screen::Workspaces | Screen::Notifications => self.move_task_selection(1),
                 }
                 if self.active_screen == Screen::Mind {
                     self.sync_mind_document_action()
@@ -661,6 +706,15 @@ impl AppState {
                 self.delete_selected_workspace()
             }
             KeyCode::Char(' ') if self.active_screen == Screen::Workspaces => vec![AppAction::None],
+            KeyCode::Enter if self.active_screen == Screen::Dashboard => {
+                if self.selected_work_item.is_some() {
+                    self.active_screen = Screen::Run;
+                    self.status_line = "opened run".to_string();
+                } else {
+                    self.status_line = "select a work item first".to_string();
+                }
+                vec![AppAction::None]
+            }
             KeyCode::Char('a') if self.active_screen == Screen::Run => {
                 self.select_or_create_run_work_item()
             }
@@ -1235,7 +1289,7 @@ impl AppState {
                 task_id: work_item.task_id,
                 note_id: work_item.note_id,
                 run_state: RunState::Running,
-                pomodoro_session_id: work_item.pomodoro_session_id,
+                pomodoro_session_ids: work_item.pomodoro_session_ids.clone(),
                 started_at_unix: work_item.started_at_unix.or(Some(current_unix_timestamp())),
                 stopped_at_unix: None,
                 elapsed_seconds: work_item.elapsed_seconds,
@@ -1267,7 +1321,7 @@ impl AppState {
             task_id: work_item.task_id,
             note_id: work_item.note_id,
             run_state: RunState::Paused,
-            pomodoro_session_id: work_item.pomodoro_session_id,
+            pomodoro_session_ids: work_item.pomodoro_session_ids.clone(),
             started_at_unix: work_item.started_at_unix,
             stopped_at_unix: None,
             elapsed_seconds: u64::from(self.pomodoro.elapsed_seconds),
@@ -1285,7 +1339,8 @@ impl AppState {
             return vec![AppAction::None];
         };
 
-        let elapsed_seconds = u64::from(self.pomodoro.elapsed_seconds).max(work_item.elapsed_seconds);
+        let elapsed_seconds =
+            u64::from(self.pomodoro.elapsed_seconds).max(work_item.elapsed_seconds);
         let mut actions = self.stop_pomodoro();
         let started_at_unix = work_item.started_at_unix.or_else(|| {
             let elapsed_seconds = elapsed_seconds.min(i64::MAX as u64) as i64;
@@ -1296,7 +1351,7 @@ impl AppState {
             task_id: work_item.task_id,
             note_id: work_item.note_id,
             run_state: RunState::Stopped,
-            pomodoro_session_id: work_item.pomodoro_session_id,
+            pomodoro_session_ids: work_item.pomodoro_session_ids.clone(),
             started_at_unix,
             stopped_at_unix: Some(current_unix_timestamp()),
             elapsed_seconds,
@@ -2503,6 +2558,112 @@ mod tests {
     }
 
     #[test]
+    fn dashboard_selection_moves_through_work_items() {
+        let mut state = AppState::new();
+        state.active_screen = Screen::Dashboard;
+        state.tasks = vec![
+            Task {
+                id: 1,
+                title: "task one".to_string(),
+                description: String::new(),
+                doing: false,
+                completed: false,
+                tracked_seconds: 0,
+                created_at_unix: 0,
+            },
+            Task {
+                id: 2,
+                title: "task two".to_string(),
+                description: String::new(),
+                doing: false,
+                completed: false,
+                tracked_seconds: 0,
+                created_at_unix: 0,
+            },
+        ];
+        state.notes = vec![
+            Note {
+                id: 10,
+                vault_id: 1,
+                title: "note one".to_string(),
+                slug: "note-one".to_string(),
+                path: "note-one.md".to_string(),
+                created_at_unix: 0,
+                updated_at_unix: 0,
+            },
+            Note {
+                id: 11,
+                vault_id: 1,
+                title: "note two".to_string(),
+                slug: "note-two".to_string(),
+                path: "note-two.md".to_string(),
+                created_at_unix: 0,
+                updated_at_unix: 0,
+            },
+        ];
+        state.work_items = vec![
+            WorkItem {
+                id: 100,
+                task_id: 1,
+                note_id: 10,
+                run_state: RunState::Idle,
+                pomodoro_session_ids: Vec::new(),
+                started_at_unix: None,
+                stopped_at_unix: None,
+                elapsed_seconds: 0,
+                created_at_unix: 0,
+                updated_at_unix: 2,
+            },
+            WorkItem {
+                id: 101,
+                task_id: 2,
+                note_id: 11,
+                run_state: RunState::Running,
+                pomodoro_session_ids: vec![7],
+                started_at_unix: None,
+                stopped_at_unix: None,
+                elapsed_seconds: 15,
+                created_at_unix: 0,
+                updated_at_unix: 1,
+            },
+        ];
+        state.selected_work_item = Some(0);
+
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Down,
+            KeyModifiers::NONE,
+        )));
+
+        assert_eq!(state.selected_work_item, Some(1));
+    }
+
+    #[test]
+    fn dashboard_enter_opens_run_screen() {
+        let mut state = AppState::new();
+        state.active_screen = Screen::Dashboard;
+        state.work_items = vec![WorkItem {
+            id: 100,
+            task_id: 1,
+            note_id: 10,
+            run_state: RunState::Idle,
+            pomodoro_session_ids: Vec::new(),
+            started_at_unix: None,
+            stopped_at_unix: None,
+            elapsed_seconds: 0,
+            created_at_unix: 0,
+            updated_at_unix: 0,
+        }];
+        state.selected_work_item = Some(0);
+
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+        )));
+
+        assert_eq!(state.active_screen, Screen::Run);
+    }
+
+    #[test]
     fn started_requests_full_note_load() {
         let mut state = AppState::new();
         let actions = state.apply(AppEvent::Started);
@@ -2627,18 +2788,19 @@ mod tests {
             KeyCode::Char('s'),
             KeyModifiers::CONTROL,
         )));
-        let expected_path = vault_root.join("project-plan.md").to_string_lossy().into_owned();
+        let expected_path = vault_root
+            .join("project-plan.md")
+            .to_string_lossy()
+            .into_owned();
 
-        assert!(
-            matches!(
-                actions.as_slice(),
-                [AppAction::CreateNote { title, slug, path, document, .. }]
-                if title == "Project Plan"
-                    && slug == "project-plan"
-                    && document == "body"
-                    && path == &expected_path
-            )
-        );
+        assert!(matches!(
+            actions.as_slice(),
+            [AppAction::CreateNote { title, slug, path, document, .. }]
+            if title == "Project Plan"
+                && slug == "project-plan"
+                && document == "body"
+                && path == &expected_path
+        ));
     }
 
     #[test]

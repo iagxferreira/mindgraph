@@ -41,7 +41,7 @@ impl WorkItemRepository {
             task_id,
             note_id,
             run_state: RunState::Idle,
-            pomodoro_session_id: None,
+            pomodoro_session_ids: Vec::new(),
             started_at_unix: None,
             stopped_at_unix: None,
             elapsed_seconds: 0,
@@ -59,7 +59,7 @@ impl WorkItemRepository {
         task_id: i64,
         note_id: i64,
         run_state: RunState,
-        pomodoro_session_id: Option<i64>,
+        pomodoro_session_ids: Vec<i64>,
         started_at_unix: Option<i64>,
         stopped_at_unix: Option<i64>,
         elapsed_seconds: u64,
@@ -77,7 +77,7 @@ impl WorkItemRepository {
         item.task_id = task_id;
         item.note_id = note_id;
         item.run_state = run_state;
-        item.pomodoro_session_id = pomodoro_session_id;
+        item.pomodoro_session_ids = pomodoro_session_ids;
         item.started_at_unix = started_at_unix;
         item.stopped_at_unix = stopped_at_unix;
         item.elapsed_seconds = elapsed_seconds;
@@ -132,7 +132,7 @@ mod tests {
                 1,
                 2,
                 RunState::Running,
-                Some(9),
+                vec![9],
                 Some(10),
                 None,
                 42,
@@ -140,7 +140,7 @@ mod tests {
             .await
             .expect("update work item");
         assert_eq!(updated.run_state, RunState::Running);
-        assert_eq!(updated.pomodoro_session_id, Some(9));
+        assert_eq!(updated.pomodoro_session_ids, vec![9]);
         assert_eq!(updated.elapsed_seconds, 42);
 
         let items = repository.list_work_items().await.expect("list work items");

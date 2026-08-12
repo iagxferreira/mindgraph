@@ -108,7 +108,7 @@ pub enum AppAction {
         task_id: i64,
         note_id: i64,
         run_state: RunState,
-        pomodoro_session_id: Option<i64>,
+        pomodoro_session_ids: Vec<i64>,
         started_at_unix: Option<i64>,
         stopped_at_unix: Option<i64>,
         elapsed_seconds: u64,

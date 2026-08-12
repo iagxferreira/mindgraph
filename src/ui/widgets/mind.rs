@@ -245,22 +245,31 @@ fn draw_editor(
                 .as_ref()
                 .map(|directory| {
                     Path::new(directory)
-                        .join(format!("{}.md", draft.title.trim().to_lowercase().replace(' ', "-")))
+                        .join(format!(
+                            "{}.md",
+                            draft.title.trim().to_lowercase().replace(' ', "-")
+                        ))
                         .to_string_lossy()
                         .into_owned()
                 })
                 .unwrap_or_else(|| "select a directory".to_string()),
-            MindDraftMode::Editing { .. } => note_for_id(app, match draft.mode {
-                MindDraftMode::Editing { note_id } => note_id,
-                MindDraftMode::Creating { .. } => unreachable!(),
-            })
+            MindDraftMode::Editing { .. } => note_for_id(
+                app,
+                match draft.mode {
+                    MindDraftMode::Editing { note_id } => note_id,
+                    MindDraftMode::Creating { .. } => unreachable!(),
+                },
+            )
             .map(|note| {
                 let parent = Path::new(&note.path)
                     .parent()
                     .map(Path::to_path_buf)
                     .unwrap_or_else(|| Path::new(".").to_path_buf());
                 parent
-                    .join(format!("{}.md", draft.title.trim().to_lowercase().replace(' ', "-")))
+                    .join(format!(
+                        "{}.md",
+                        draft.title.trim().to_lowercase().replace(' ', "-")
+                    ))
                     .to_string_lossy()
                     .into_owned()
             })
