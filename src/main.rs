@@ -45,7 +45,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     process_actions(&mut app, &task_service, startup_actions).await?;
 
     let mut events = EventStream::new();
-    let mut tick = tokio::time::interval(Duration::from_millis(250));
+    let mut tick = tokio::time::interval(Duration::from_secs(1));
 
     loop {
         terminal.draw(|frame| ui::draw(frame, &app))?;

@@ -35,6 +35,22 @@ pub enum Theme {
     Slate,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PomodoroPhase {
+    Work,
+    Break,
+}
+
+#[derive(Debug, Clone)]
+pub struct PomodoroState {
+    pub phase: PomodoroPhase,
+    pub running: bool,
+    pub remaining_seconds: u32,
+    pub work_seconds: u32,
+    pub break_seconds: u32,
+    pub completed_sessions: u32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TaskInputMode {
     Creating,
@@ -57,6 +73,7 @@ pub struct AppState {
     pub selected_workspace: Option<usize>,
     pub theme: Theme,
     pub status_line: String,
+    pub pomodoro: PomodoroState,
     pub task_input_mode: Option<TaskInputMode>,
     pub task_input_focus: TaskInputField,
     pub task_input_title: String,
@@ -79,6 +96,14 @@ impl AppState {
             selected_workspace: Some(0),
             theme: Theme::Ember,
             status_line: "Ready".to_string(),
+            pomodoro: PomodoroState {
+                phase: PomodoroPhase::Work,
+                running: false,
+                remaining_seconds: 25 * 60,
+                work_seconds: 25 * 60,
+                break_seconds: 5 * 60,
+                completed_sessions: 0,
+            },
             task_input_mode: None,
             task_input_focus: TaskInputField::Title,
             task_input_title: String::new(),
@@ -90,7 +115,10 @@ impl AppState {
     pub fn apply(&mut self, event: AppEvent) -> Vec<AppAction> {
         match event {
             AppEvent::Started => vec![AppAction::LoadTasks],
-            AppEvent::Tick => vec![AppAction::None],
+            AppEvent::Tick => {
+                self.tick_pomodoro();
+                vec![AppAction::None]
+            }
             AppEvent::Resize => vec![AppAction::None],
             AppEvent::Key(key) => self.handle_key(key),
             AppEvent::TasksLoaded(tasks) => {
@@ -198,6 +226,14 @@ impl AppState {
                     Theme::Slate => Theme::Ember,
                 };
                 self.status_line = "theme switched".to_string();
+                vec![AppAction::None]
+            }
+            KeyCode::Char('p') => {
+                self.toggle_pomodoro();
+                vec![AppAction::None]
+            }
+            KeyCode::Char('r') => {
+                self.reset_pomodoro();
                 vec![AppAction::None]
             }
             _ => vec![AppAction::None],
@@ -332,6 +368,49 @@ impl AppState {
             }
         }
     }
+
+    fn toggle_pomodoro(&mut self) {
+        self.pomodoro.running = !self.pomodoro.running;
+        self.status_line = if self.pomodoro.running {
+            "pomodoro started".to_string()
+        } else {
+            "pomodoro paused".to_string()
+        };
+    }
+
+    fn reset_pomodoro(&mut self) {
+        self.pomodoro.running = false;
+        self.pomodoro.phase = PomodoroPhase::Work;
+        self.pomodoro.remaining_seconds = self.pomodoro.work_seconds;
+        self.status_line = "pomodoro reset".to_string();
+    }
+
+    pub fn tick_pomodoro(&mut self) {
+        if !self.pomodoro.running || self.pomodoro.remaining_seconds == 0 {
+            return;
+        }
+
+        self.pomodoro.remaining_seconds -= 1;
+        if self.pomodoro.remaining_seconds == 0 {
+            self.advance_pomodoro_phase();
+        }
+    }
+
+    fn advance_pomodoro_phase(&mut self) {
+        match self.pomodoro.phase {
+            PomodoroPhase::Work => {
+                self.pomodoro.phase = PomodoroPhase::Break;
+                self.pomodoro.remaining_seconds = self.pomodoro.break_seconds;
+                self.pomodoro.completed_sessions += 1;
+                self.status_line = "work session complete".to_string();
+            }
+            PomodoroPhase::Break => {
+                self.pomodoro.phase = PomodoroPhase::Work;
+                self.pomodoro.remaining_seconds = self.pomodoro.work_seconds;
+                self.status_line = "break complete".to_string();
+            }
+        }
+    }
 }
 
 impl Default for AppState {
@@ -411,6 +490,19 @@ mod tests {
             KeyModifiers::CONTROL,
         )));
         assert_eq!(state.active_screen, Screen::Dashboard);
+    }
+
+    #[test]
+    fn pomodoro_can_toggle_and_reset() {
+        let mut state = AppState::new();
+
+        state.toggle_pomodoro();
+        assert!(state.pomodoro.running);
+
+        state.reset_pomodoro();
+        assert!(!state.pomodoro.running);
+        assert_eq!(state.pomodoro.phase, PomodoroPhase::Work);
+        assert_eq!(state.pomodoro.remaining_seconds, state.pomodoro.work_seconds);
     }
 
     #[test]
