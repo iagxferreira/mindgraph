@@ -147,6 +147,7 @@ fn highlight_style() -> Style {
 fn screen_label(screen: Screen) -> &'static str {
     match screen {
         Screen::Dashboard => "dashboard",
+        Screen::Pomodoro => "pomodoro",
         Screen::Tasks => "tasks",
         Screen::Mind => "mind",
         Screen::Notifications => "notifications",

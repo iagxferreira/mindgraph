@@ -5,12 +5,12 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-use crate::app::{Link, Note, Task, Vault, Workspace, current_unix_timestamp};
+use crate::app::{Link, Note, PomodoroSession, Task, Vault, Workspace, current_unix_timestamp};
 
 use super::{
     error::StorageError, link_repository::LinkRepository, note_repository::NoteRepository,
-    task_repository::TaskRepository, vault_repository::VaultRepository,
-    workspace_repository::WorkspaceRepository,
+    pomodoro_repository::PomodoroRepository, task_repository::TaskRepository,
+    vault_repository::VaultRepository, workspace_repository::WorkspaceRepository,
 };
 
 #[derive(Clone)]
@@ -36,6 +36,10 @@ impl Database {
 
     pub fn task_repository(&self) -> TaskRepository {
         TaskRepository::new(self.root_dir.clone())
+    }
+
+    pub fn pomodoro_repository(&self) -> PomodoroRepository {
+        PomodoroRepository::new(self.root_dir.clone())
     }
 
     pub fn vault_repository(&self) -> VaultRepository {
@@ -79,11 +83,15 @@ impl Default for StorageConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct StorageData {
     pub tasks: Vec<Task>,
+    #[serde(default)]
+    pub pomodoro_sessions: Vec<PomodoroSession>,
     pub workspaces: Vec<Workspace>,
     pub vaults: Vec<Vault>,
     pub notes: Vec<Note>,
     pub links: Vec<Link>,
     pub next_task_id: i64,
+    #[serde(default)]
+    pub next_pomodoro_session_id: i64,
     pub next_workspace_id: i64,
     pub next_vault_id: i64,
     pub next_note_id: i64,
@@ -98,6 +106,8 @@ struct LegacyStorageData {
     pub notes: Vec<LegacyNote>,
     pub links: Vec<Link>,
     pub next_task_id: i64,
+    #[serde(default)]
+    pub next_pomodoro_session_id: i64,
     pub next_workspace_id: i64,
     pub next_vault_id: i64,
     pub next_note_id: i64,
@@ -120,6 +130,14 @@ impl StorageData {
         self.next_task_id = self
             .next_task_id
             .max(self.tasks.iter().map(|item| item.id).max().unwrap_or(0) + 1);
+        self.next_pomodoro_session_id = self.next_pomodoro_session_id.max(
+            self.pomodoro_sessions
+                .iter()
+                .map(|item| item.id)
+                .max()
+                .unwrap_or(0)
+                + 1,
+        );
         self.next_workspace_id = self.next_workspace_id.max(
             self.workspaces
                 .iter()
@@ -143,6 +161,13 @@ impl StorageData {
         self.normalize_counters();
         let id = self.next_task_id.max(1);
         self.next_task_id = id + 1;
+        id
+    }
+
+    pub(crate) fn allocate_pomodoro_session_id(&mut self) -> i64 {
+        self.normalize_counters();
+        let id = self.next_pomodoro_session_id.max(1);
+        self.next_pomodoro_session_id = id + 1;
         id
     }
 
@@ -298,11 +323,13 @@ fn migrate_legacy_data(
 ) -> Result<StorageData, StorageError> {
     let mut data = StorageData {
         tasks: legacy.tasks,
+        pomodoro_sessions: Vec::new(),
         workspaces: legacy.workspaces,
         vaults: legacy.vaults,
         notes: Vec::with_capacity(legacy.notes.len()),
         links: legacy.links,
         next_task_id: legacy.next_task_id,
+        next_pomodoro_session_id: legacy.next_pomodoro_session_id,
         next_workspace_id: legacy.next_workspace_id,
         next_vault_id: legacy.next_vault_id,
         next_note_id: legacy.next_note_id,

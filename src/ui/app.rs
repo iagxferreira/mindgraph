@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{
     app::{AppState, Screen, Theme},
-    ui::widgets::{dashboard, launcher, mind, tasks, workspaces},
+    ui::widgets::{dashboard, launcher, mind, pomodoro, tasks, workspaces},
 };
 
 pub fn draw(frame: &mut Frame<'_>, app: &AppState) {
@@ -26,6 +26,7 @@ pub fn draw(frame: &mut Frame<'_>, app: &AppState) {
 
     match app.active_screen {
         Screen::Dashboard => dashboard::draw(frame, shell[1], app),
+        Screen::Pomodoro => pomodoro::draw(frame, shell[1], app),
         Screen::Tasks => tasks::draw(frame, shell[1], app),
         Screen::Mind => mind::draw(frame, shell[1], app),
         Screen::Notifications => dashboard::draw(frame, shell[1], app),
@@ -131,6 +132,23 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
                 Span::raw(": cancel"),
             ]);
         }
+        Screen::Pomodoro => {
+            hints.extend([
+                Span::raw("  •  "),
+                Span::styled("p", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(if app.pomodoro.running {
+                    ": pause"
+                } else {
+                    ": resume"
+                }),
+                Span::raw("  •  "),
+                Span::styled("s", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": stop/save"),
+                Span::raw("  •  "),
+                Span::styled("j/k", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": sessions"),
+            ]);
+        }
         Screen::Workspaces if app.workspace_input_mode.is_some() => {
             hints.extend([
                 Span::raw("  •  "),
@@ -161,6 +179,9 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
                 Span::raw("  •  "),
                 Span::styled("d", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(": delete"),
+                Span::raw("  •  "),
+                Span::styled("m", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": mark doing"),
                 Span::raw("  •  "),
                 Span::styled("t", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(": theme"),
@@ -198,8 +219,8 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
                     ": start pomodoro"
                 }),
                 Span::raw("  •  "),
-                Span::styled("r", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(": reset pomodoro"),
+                Span::styled("s", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": stop pomodoro"),
                 Span::raw("  •  "),
                 Span::styled("t", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(": theme"),
@@ -245,6 +266,7 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
 fn screen_label(screen: Screen) -> &'static str {
     match screen {
         Screen::Dashboard => "dashboard",
+        Screen::Pomodoro => "pomodoro",
         Screen::Tasks => "tasks",
         Screen::Mind => "mind",
         Screen::Notifications => "notifications",

@@ -13,6 +13,7 @@ use crate::app::{AppAction, AppEvent};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Screen {
     Dashboard,
+    Pomodoro,
     Tasks,
     Mind,
     Notifications,
@@ -24,7 +25,11 @@ pub struct Task {
     pub id: i64,
     pub title: String,
     pub description: String,
+    #[serde(default)]
+    pub doing: bool,
     pub completed: bool,
+    #[serde(default)]
+    pub tracked_seconds: u64,
     pub created_at_unix: i64,
 }
 
@@ -121,7 +126,7 @@ pub enum Theme {
     Slate,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PomodoroPhase {
     Work,
     Break,
@@ -132,9 +137,21 @@ pub struct PomodoroState {
     pub phase: PomodoroPhase,
     pub running: bool,
     pub remaining_seconds: u32,
+    pub elapsed_seconds: u32,
     pub work_seconds: u32,
     pub break_seconds: u32,
     pub completed_sessions: u32,
+    pub task_id: Option<i64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PomodoroSession {
+    pub id: i64,
+    pub task_id: Option<i64>,
+    pub phase: PomodoroPhase,
+    pub started_at_unix: i64,
+    pub stopped_at_unix: i64,
+    pub elapsed_seconds: u32,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -166,6 +183,7 @@ pub enum LauncherTarget {
     OpenTaskInput,
     EditTask,
     ToggleTask,
+    ToggleTaskDoing,
     DeleteTask,
     OpenMindDraft,
     EditMindDraft,
@@ -213,6 +231,8 @@ pub struct AppState {
     pub theme: Theme,
     pub status_line: String,
     pub pomodoro: PomodoroState,
+    pub pomodoro_sessions: Vec<PomodoroSession>,
+    pub selected_pomodoro_session: Option<usize>,
     pub mind_draft: Option<MindDraft>,
     pub workspace_input_mode: Option<WorkspaceInputMode>,
     pub workspace_input_focus: WorkspaceInputField,
@@ -254,10 +274,14 @@ impl AppState {
                 phase: PomodoroPhase::Work,
                 running: false,
                 remaining_seconds: 25 * 60,
+                elapsed_seconds: 0,
                 work_seconds: 25 * 60,
                 break_seconds: 5 * 60,
                 completed_sessions: 0,
+                task_id: None,
             },
+            pomodoro_sessions: Vec::new(),
+            selected_pomodoro_session: None,
             mind_draft: None,
             workspace_input_mode: None,
             workspace_input_focus: WorkspaceInputField::Name,
@@ -278,12 +302,10 @@ impl AppState {
                 AppAction::LoadVaults,
                 AppAction::LoadAllNotes,
                 AppAction::LoadTasks,
+                AppAction::LoadPomodoroSessions,
                 AppAction::LoadWorkspaces,
             ],
-            AppEvent::Tick => {
-                self.tick_pomodoro();
-                vec![AppAction::None]
-            }
+            AppEvent::Tick => self.tick_pomodoro(),
             AppEvent::Resize => vec![AppAction::None],
             AppEvent::Key(key) => self.handle_key(key),
             AppEvent::VaultsLoaded(vaults) => {
@@ -314,6 +336,13 @@ impl AppState {
                 self.tasks = tasks;
                 self.sync_selection();
                 self.status_line = format!("loaded {} tasks", self.tasks.len());
+                vec![AppAction::None]
+            }
+            AppEvent::PomodoroSessionsLoaded(sessions) => {
+                self.pomodoro_sessions = sessions;
+                self.sync_pomodoro_session_selection();
+                self.status_line =
+                    format!("loaded {} pomodoro sessions", self.pomodoro_sessions.len());
                 vec![AppAction::None]
             }
             AppEvent::WorkspacesLoaded(workspaces) => {
@@ -376,6 +405,13 @@ impl AppState {
                 self.sync_selection();
                 self.clear_task_input();
                 self.status_line = "task deleted".to_string();
+                vec![AppAction::None]
+            }
+            AppEvent::PomodoroSessionCreated(session) => {
+                self.pomodoro_sessions.push(session);
+                self.sort_pomodoro_sessions();
+                self.sync_pomodoro_session_selection();
+                self.status_line = "pomodoro saved".to_string();
                 vec![AppAction::None]
             }
             AppEvent::WorkspaceCreated(workspace) => {
@@ -464,6 +500,7 @@ impl AppState {
             KeyCode::Up | KeyCode::Char('k') => {
                 match self.active_screen {
                     Screen::Mind => self.move_mind_selection(-1),
+                    Screen::Pomodoro => self.move_pomodoro_session_selection(-1),
                     _ => self.move_task_selection(-1),
                 }
                 if self.active_screen == Screen::Mind {
@@ -476,6 +513,7 @@ impl AppState {
                 match self.active_screen {
                     Screen::Tasks => self.move_task_selection(1),
                     Screen::Mind => self.move_mind_selection(1),
+                    Screen::Pomodoro => self.move_pomodoro_session_selection(1),
                     Screen::Workspaces | Screen::Notifications | Screen::Dashboard => {
                         self.move_task_selection(1)
                     }
@@ -512,6 +550,9 @@ impl AppState {
             KeyCode::Char('d') if self.active_screen == Screen::Tasks => {
                 self.delete_selected_task()
             }
+            KeyCode::Char('m') if self.active_screen == Screen::Tasks => {
+                self.toggle_selected_task_doing()
+            }
             KeyCode::Char('t') => {
                 self.theme = match self.theme {
                     Theme::Ember => Theme::Slate,
@@ -520,6 +561,8 @@ impl AppState {
                 self.status_line = "theme switched".to_string();
                 vec![AppAction::None]
             }
+            KeyCode::Char('p') if self.active_screen == Screen::Pomodoro => self.toggle_pomodoro(),
+            KeyCode::Char('s') if self.active_screen == Screen::Pomodoro => self.stop_pomodoro(),
             KeyCode::Char('a') if self.active_screen == Screen::Workspaces => {
                 self.begin_workspace_create()
             }
@@ -530,14 +573,8 @@ impl AppState {
                 self.delete_selected_workspace()
             }
             KeyCode::Char(' ') if self.active_screen == Screen::Workspaces => vec![AppAction::None],
-            KeyCode::Char('p') => {
-                self.toggle_pomodoro();
-                vec![AppAction::None]
-            }
-            KeyCode::Char('r') => {
-                self.reset_pomodoro();
-                vec![AppAction::None]
-            }
+            KeyCode::Char('p') => self.toggle_pomodoro(),
+            KeyCode::Char('r') => self.reset_pomodoro(),
             _ => vec![AppAction::None],
         }
     }
@@ -572,6 +609,9 @@ impl AppState {
                         }
                         self.status_line = "select a task first".to_string();
                     }
+                    Some(LauncherTarget::ToggleTaskDoing) => {
+                        return self.toggle_selected_task_doing();
+                    }
                     Some(LauncherTarget::DeleteTask) => {
                         return self.delete_selected_task();
                     }
@@ -601,10 +641,10 @@ impl AppState {
                         self.status_line = "theme switched".to_string();
                     }
                     Some(LauncherTarget::TogglePomodoro) => {
-                        self.toggle_pomodoro();
+                        return self.toggle_pomodoro();
                     }
                     Some(LauncherTarget::ResetPomodoro) => {
-                        self.reset_pomodoro();
+                        return self.reset_pomodoro();
                     }
                     Some(LauncherTarget::Quit) => {
                         self.should_quit = true;
@@ -797,10 +837,34 @@ impl AppState {
             .map(|task| task.id)
     }
 
+    fn selected_doing_task_id(&self) -> Option<i64> {
+        self.selected_task
+            .and_then(|index| self.tasks.get(index))
+            .and_then(|task| task.doing.then_some(task.id))
+            .or_else(|| {
+                self.tasks
+                    .iter()
+                    .find(|task| task.doing)
+                    .map(|task| task.id)
+            })
+    }
+
     fn selected_workspace_id(&self) -> Option<i64> {
         self.selected_workspace
             .and_then(|index| self.workspaces.get(index))
             .map(|workspace| workspace.id)
+    }
+
+    fn move_pomodoro_session_selection(&mut self, offset: isize) {
+        if self.pomodoro_sessions.is_empty() {
+            self.selected_pomodoro_session = None;
+            return;
+        }
+
+        let current = self.selected_pomodoro_session.unwrap_or(0) as isize;
+        let next =
+            (current + offset).clamp(0, self.pomodoro_sessions.len().saturating_sub(1) as isize);
+        self.selected_pomodoro_session = Some(next as usize);
     }
 
     fn selected_vault_id(&self) -> Option<i64> {
@@ -917,6 +981,18 @@ impl AppState {
         }
     }
 
+    fn sync_pomodoro_session_selection(&mut self) {
+        if self.pomodoro_sessions.is_empty() {
+            self.selected_pomodoro_session = None;
+        } else {
+            self.selected_pomodoro_session = Some(
+                self.selected_pomodoro_session
+                    .unwrap_or(0)
+                    .min(self.pomodoro_sessions.len() - 1),
+            );
+        }
+    }
+
     fn sync_mind_selection(&mut self) {
         let entries = self.mind_entries();
         if entries.is_empty() {
@@ -944,6 +1020,16 @@ impl AppState {
                 .updated_at_unix
                 .cmp(&left.updated_at_unix)
                 .then_with(|| right.created_at_unix.cmp(&left.created_at_unix))
+                .then_with(|| right.id.cmp(&left.id))
+        });
+    }
+
+    fn sort_pomodoro_sessions(&mut self) {
+        self.pomodoro_sessions.sort_by(|left, right| {
+            right
+                .stopped_at_unix
+                .cmp(&left.stopped_at_unix)
+                .then_with(|| right.started_at_unix.cmp(&left.started_at_unix))
                 .then_with(|| right.id.cmp(&left.id))
         });
     }
@@ -1006,6 +1092,104 @@ impl AppState {
                 self.status_line = "select a task first".to_string();
                 vec![AppAction::None]
             })
+    }
+
+    fn toggle_selected_task_doing(&mut self) -> Vec<AppAction> {
+        let Some(task_id) = self.selected_task_id() else {
+            self.status_line = "select a task first".to_string();
+            return vec![AppAction::None];
+        };
+
+        let doing = self
+            .selected_task
+            .and_then(|index| self.tasks.get(index))
+            .map(|task| !task.doing)
+            .unwrap_or(true);
+
+        vec![AppAction::SetTaskDoing { task_id, doing }]
+    }
+
+    fn start_or_resume_pomodoro(&mut self) -> Vec<AppAction> {
+        if self.pomodoro.running {
+            self.status_line = "pomodoro already running".to_string();
+            return vec![AppAction::None];
+        }
+
+        if self.pomodoro.task_id.is_none() {
+            self.pomodoro.task_id = self.selected_doing_task_id();
+        }
+
+        self.pomodoro.running = true;
+        self.status_line = if let Some(task_id) = self.pomodoro.task_id {
+            let task_label = self
+                .tasks
+                .iter()
+                .find(|task| task.id == task_id)
+                .map(|task| task.title.clone())
+                .unwrap_or_else(|| "task".to_string());
+            format!("pomodoro running on {task_label}")
+        } else {
+            "pomodoro running".to_string()
+        };
+        vec![AppAction::None]
+    }
+
+    fn pause_pomodoro(&mut self) -> Vec<AppAction> {
+        if !self.pomodoro.running {
+            self.status_line = "pomodoro already paused".to_string();
+            return vec![AppAction::None];
+        }
+
+        self.pomodoro.running = false;
+        self.status_line = "pomodoro paused".to_string();
+        vec![AppAction::None]
+    }
+
+    fn stop_pomodoro(&mut self) -> Vec<AppAction> {
+        let elapsed_seconds = self.pomodoro.elapsed_seconds;
+        let task_id = self.pomodoro.task_id;
+        let phase = self.pomodoro.phase;
+
+        self.pomodoro.running = false;
+        self.pomodoro.phase = PomodoroPhase::Work;
+        self.pomodoro.remaining_seconds = self.pomodoro.work_seconds;
+        self.pomodoro.elapsed_seconds = 0;
+        self.pomodoro.task_id = None;
+
+        if elapsed_seconds == 0 {
+            self.status_line = "pomodoro stopped".to_string();
+            return vec![AppAction::None];
+        }
+
+        let stopped_at_unix = current_unix_timestamp();
+        let started_at_unix = stopped_at_unix.saturating_sub(i64::from(elapsed_seconds));
+        let mut actions = vec![AppAction::CreatePomodoroSession {
+            session: PomodoroSession {
+                id: 0,
+                task_id,
+                phase,
+                started_at_unix,
+                stopped_at_unix,
+                elapsed_seconds,
+            },
+        }];
+
+        if let Some(task_id) = task_id {
+            actions.push(AppAction::AddTaskTrackedTime {
+                task_id,
+                tracked_seconds: u64::from(elapsed_seconds),
+            });
+            actions.push(AppAction::SetTaskDoing {
+                task_id,
+                doing: false,
+            });
+        }
+
+        self.status_line = format!(
+            "saved {} of pomodoro time",
+            format_duration(elapsed_seconds)
+        );
+        actions
     }
 
     fn begin_mind_note(&mut self) -> Vec<AppAction> {
@@ -1475,6 +1659,25 @@ impl AppState {
                     target: LauncherTarget::ResetPomodoro,
                 },
             ],
+            Screen::Pomodoro => vec![
+                LauncherEntry {
+                    label: if self.pomodoro.running {
+                        "pause pomodoro".to_string()
+                    } else {
+                        "resume pomodoro".to_string()
+                    },
+                    hint: format!(
+                        "{} remaining",
+                        format_duration(self.pomodoro.remaining_seconds)
+                    ),
+                    target: LauncherTarget::TogglePomodoro,
+                },
+                LauncherEntry {
+                    label: "stop pomodoro".to_string(),
+                    hint: "save the current session".to_string(),
+                    target: LauncherTarget::ResetPomodoro,
+                },
+            ],
             Screen::Tasks => vec![
                 LauncherEntry {
                     label: "add task".to_string(),
@@ -1495,6 +1698,11 @@ impl AppState {
                     label: "delete task".to_string(),
                     hint: "remove the selected task".to_string(),
                     target: LauncherTarget::DeleteTask,
+                },
+                LauncherEntry {
+                    label: "mark doing".to_string(),
+                    hint: "track the selected task time".to_string(),
+                    target: LauncherTarget::ToggleTaskDoing,
                 },
                 LauncherEntry {
                     label: "toggle theme".to_string(),
@@ -1603,47 +1811,78 @@ impl AppState {
         }
     }
 
-    fn toggle_pomodoro(&mut self) {
-        self.pomodoro.running = !self.pomodoro.running;
-        self.status_line = if self.pomodoro.running {
-            "pomodoro started".to_string()
+    fn toggle_pomodoro(&mut self) -> Vec<AppAction> {
+        if self.pomodoro.running {
+            self.pause_pomodoro()
         } else {
-            "pomodoro paused".to_string()
-        };
+            self.start_or_resume_pomodoro()
+        }
     }
 
-    fn reset_pomodoro(&mut self) {
-        self.pomodoro.running = false;
-        self.pomodoro.phase = PomodoroPhase::Work;
-        self.pomodoro.remaining_seconds = self.pomodoro.work_seconds;
-        self.status_line = "pomodoro reset".to_string();
+    fn reset_pomodoro(&mut self) -> Vec<AppAction> {
+        self.stop_pomodoro()
     }
 
-    pub fn tick_pomodoro(&mut self) {
+    pub fn tick_pomodoro(&mut self) -> Vec<AppAction> {
         if !self.pomodoro.running || self.pomodoro.remaining_seconds == 0 {
-            return;
+            return vec![AppAction::None];
         }
 
         self.pomodoro.remaining_seconds -= 1;
+        self.pomodoro.elapsed_seconds = self.pomodoro.elapsed_seconds.saturating_add(1);
         if self.pomodoro.remaining_seconds == 0 {
-            self.advance_pomodoro_phase();
+            return self.advance_pomodoro_phase();
         }
+
+        vec![AppAction::None]
     }
 
-    fn advance_pomodoro_phase(&mut self) {
+    fn advance_pomodoro_phase(&mut self) -> Vec<AppAction> {
         match self.pomodoro.phase {
-            PomodoroPhase::Work => {
-                self.pomodoro.phase = PomodoroPhase::Break;
-                self.pomodoro.remaining_seconds = self.pomodoro.break_seconds;
-                self.pomodoro.completed_sessions += 1;
-                self.status_line = "work session complete".to_string();
-            }
+            PomodoroPhase::Work => self.finish_work_session(),
             PomodoroPhase::Break => {
                 self.pomodoro.phase = PomodoroPhase::Work;
                 self.pomodoro.remaining_seconds = self.pomodoro.work_seconds;
+                self.pomodoro.elapsed_seconds = 0;
+                self.pomodoro.task_id = None;
                 self.status_line = "break complete".to_string();
+                vec![AppAction::None]
             }
         }
+    }
+
+    fn finish_work_session(&mut self) -> Vec<AppAction> {
+        let elapsed_seconds = self.pomodoro.elapsed_seconds;
+        let task_id = self.pomodoro.task_id;
+
+        self.pomodoro.phase = PomodoroPhase::Break;
+        self.pomodoro.remaining_seconds = self.pomodoro.break_seconds;
+        self.pomodoro.elapsed_seconds = 0;
+        self.pomodoro.running = false;
+        self.pomodoro.completed_sessions += 1;
+
+        let stopped_at_unix = current_unix_timestamp();
+        let started_at_unix = stopped_at_unix.saturating_sub(i64::from(elapsed_seconds));
+        let mut actions = vec![AppAction::CreatePomodoroSession {
+            session: PomodoroSession {
+                id: 0,
+                task_id,
+                phase: PomodoroPhase::Work,
+                started_at_unix,
+                stopped_at_unix,
+                elapsed_seconds,
+            },
+        }];
+
+        if let Some(task_id) = task_id {
+            actions.push(AppAction::AddTaskTrackedTime {
+                task_id,
+                tracked_seconds: u64::from(elapsed_seconds),
+            });
+        }
+
+        self.status_line = "work session complete".to_string();
+        actions
     }
 }
 
@@ -1659,23 +1898,26 @@ fn next_screen(screen: Screen) -> Screen {
         Screen::Tasks => Screen::Mind,
         Screen::Mind => Screen::Notifications,
         Screen::Notifications => Screen::Workspaces,
-        Screen::Workspaces => Screen::Dashboard,
+        Screen::Workspaces => Screen::Pomodoro,
+        Screen::Pomodoro => Screen::Dashboard,
     }
 }
 
 fn previous_screen(screen: Screen) -> Screen {
     match screen {
-        Screen::Dashboard => Screen::Workspaces,
+        Screen::Dashboard => Screen::Pomodoro,
         Screen::Tasks => Screen::Dashboard,
         Screen::Mind => Screen::Tasks,
         Screen::Notifications => Screen::Mind,
         Screen::Workspaces => Screen::Notifications,
+        Screen::Pomodoro => Screen::Workspaces,
     }
 }
 
 fn screen_label(screen: Screen) -> &'static str {
     match screen {
         Screen::Dashboard => "dashboard",
+        Screen::Pomodoro => "pomodoro",
         Screen::Tasks => "tasks",
         Screen::Mind => "mind",
         Screen::Notifications => "notifications",
@@ -1789,7 +2031,7 @@ mod tests {
             KeyCode::Char('h'),
             KeyModifiers::CONTROL,
         )));
-        assert_eq!(state.active_screen, Screen::Workspaces);
+        assert_eq!(state.active_screen, Screen::Pomodoro);
     }
 
     #[test]
@@ -1803,6 +2045,7 @@ mod tests {
                 AppAction::LoadVaults,
                 AppAction::LoadAllNotes,
                 AppAction::LoadTasks,
+                AppAction::LoadPomodoroSessions,
                 AppAction::LoadWorkspaces
             ]
         ));
@@ -1812,10 +2055,10 @@ mod tests {
     fn pomodoro_can_toggle_and_reset() {
         let mut state = AppState::new();
 
-        state.toggle_pomodoro();
+        let _ = state.toggle_pomodoro();
         assert!(state.pomodoro.running);
 
-        state.reset_pomodoro();
+        let _ = state.reset_pomodoro();
         assert!(!state.pomodoro.running);
         assert_eq!(state.pomodoro.phase, PomodoroPhase::Work);
         assert_eq!(
@@ -1834,14 +2077,18 @@ mod tests {
                 id: 1,
                 title: "one".to_string(),
                 description: String::new(),
+                doing: false,
                 completed: false,
+                tracked_seconds: 0,
                 created_at_unix: 0,
             },
             Task {
                 id: 2,
                 title: "two".to_string(),
                 description: String::new(),
+                doing: false,
                 completed: false,
+                tracked_seconds: 0,
                 created_at_unix: 0,
             },
         ]));

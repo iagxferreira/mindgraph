@@ -24,6 +24,12 @@ pub trait TaskService: Send + Sync {
     ) -> Result<Task, ServiceError>;
     async fn toggle_task(&self, task_id: i64) -> Result<Task, ServiceError>;
     async fn delete_task(&self, task_id: i64) -> Result<(), ServiceError>;
+    async fn set_task_doing(&self, task_id: i64, doing: bool) -> Result<Task, ServiceError>;
+    async fn add_task_tracked_time(
+        &self,
+        task_id: i64,
+        tracked_seconds: u64,
+    ) -> Result<Task, ServiceError>;
 }
 
 #[derive(Clone)]
@@ -66,5 +72,20 @@ impl TaskService for TaskServiceImpl {
     async fn delete_task(&self, task_id: i64) -> Result<(), ServiceError> {
         self.repository.delete_task(task_id).await?;
         Ok(())
+    }
+
+    async fn set_task_doing(&self, task_id: i64, doing: bool) -> Result<Task, ServiceError> {
+        Ok(self.repository.set_task_doing(task_id, doing).await?)
+    }
+
+    async fn add_task_tracked_time(
+        &self,
+        task_id: i64,
+        tracked_seconds: u64,
+    ) -> Result<Task, ServiceError> {
+        Ok(self
+            .repository
+            .add_task_tracked_time(task_id, tracked_seconds)
+            .await?)
     }
 }

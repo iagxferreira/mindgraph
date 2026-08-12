@@ -1,6 +1,6 @@
 use crossterm::event::KeyEvent;
 
-use crate::app::{Note, Task, Vault, Workspace};
+use crate::app::{Note, PomodoroSession, Task, Vault, Workspace};
 
 #[derive(Debug, Clone)]
 pub enum AppEvent {
@@ -12,6 +12,7 @@ pub enum AppEvent {
     NotesLoaded(Vec<Note>),
     NoteDocumentLoaded { note_id: i64, document: String },
     TasksLoaded(Vec<Task>),
+    PomodoroSessionsLoaded(Vec<PomodoroSession>),
     WorkspacesLoaded(Vec<Workspace>),
     NoteCreated(Note),
     NoteUpdated(Note),
@@ -19,6 +20,7 @@ pub enum AppEvent {
     TaskCreated(Task),
     TaskUpdated(Task),
     TaskDeleted(i64),
+    PomodoroSessionCreated(PomodoroSession),
     WorkspaceCreated(Workspace),
     WorkspaceUpdated(Workspace),
     WorkspaceDeleted(i64),
@@ -31,6 +33,7 @@ pub enum AppAction {
     LoadVaults,
     LoadAllNotes,
     LoadTasks,
+    LoadPomodoroSessions,
     LoadWorkspaces,
     CreateNote {
         vault_id: i64,
@@ -66,6 +69,17 @@ pub enum AppAction {
     },
     DeleteTask {
         task_id: i64,
+    },
+    SetTaskDoing {
+        task_id: i64,
+        doing: bool,
+    },
+    AddTaskTrackedTime {
+        task_id: i64,
+        tracked_seconds: u64,
+    },
+    CreatePomodoroSession {
+        session: PomodoroSession,
     },
     CreateWorkspace {
         name: String,

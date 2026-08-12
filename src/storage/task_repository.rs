@@ -21,8 +21,10 @@ impl TaskRepository {
     pub async fn list_tasks(&self) -> Result<Vec<Task>, StorageError> {
         let mut tasks = load_data(&self.root_dir)?.tasks;
         tasks.sort_by(|left, right| {
-            left.completed
-                .cmp(&right.completed)
+            right
+                .doing
+                .cmp(&left.doing)
+                .then_with(|| left.completed.cmp(&right.completed))
                 .then_with(|| right.created_at_unix.cmp(&left.created_at_unix))
                 .then_with(|| right.id.cmp(&left.id))
         });
@@ -39,7 +41,9 @@ impl TaskRepository {
             id: data.allocate_task_id(),
             title,
             description,
+            doing: false,
             completed: false,
+            tracked_seconds: 0,
             created_at_unix: crate::app::current_unix_timestamp(),
         };
         data.tasks.push(task.clone());
@@ -80,6 +84,48 @@ impl TaskRepository {
                 id: task_id,
             })?;
         task.completed = !task.completed;
+        if task.completed {
+            task.doing = false;
+        }
+        let updated = task.clone();
+        save_data(&self.root_dir, &data)?;
+        Ok(updated)
+    }
+
+    pub async fn set_task_doing(&self, task_id: i64, doing: bool) -> Result<Task, StorageError> {
+        let mut data = load_data(&self.root_dir)?;
+        let task = data
+            .tasks
+            .iter_mut()
+            .find(|current| current.id == task_id)
+            .ok_or(StorageError::NotFound {
+                entity: "task",
+                id: task_id,
+            })?;
+        task.doing = doing;
+        if doing {
+            task.completed = false;
+        }
+        let updated = task.clone();
+        save_data(&self.root_dir, &data)?;
+        Ok(updated)
+    }
+
+    pub async fn add_task_tracked_time(
+        &self,
+        task_id: i64,
+        tracked_seconds: u64,
+    ) -> Result<Task, StorageError> {
+        let mut data = load_data(&self.root_dir)?;
+        let task = data
+            .tasks
+            .iter_mut()
+            .find(|current| current.id == task_id)
+            .ok_or(StorageError::NotFound {
+                entity: "task",
+                id: task_id,
+            })?;
+        task.tracked_seconds = task.tracked_seconds.saturating_add(tracked_seconds);
         let updated = task.clone();
         save_data(&self.root_dir, &data)?;
         Ok(updated)
@@ -126,9 +172,12 @@ mod tests {
         assert_eq!(created.title, "ship the milestone");
         assert_eq!(created.description, "write release notes");
         assert!(!created.completed);
+        assert!(!created.doing);
+        assert_eq!(created.tracked_seconds, 0);
 
         let toggled = repository.toggle_task(created.id).await.expect("toggle");
         assert!(toggled.completed);
+        assert!(!toggled.doing);
 
         let updated = repository
             .update_task(
@@ -146,5 +195,18 @@ mod tests {
         assert_eq!(tasks[0].title, "renamed task");
         assert_eq!(tasks[0].description, "updated body");
         assert!(tasks[0].completed);
+
+        let doing = repository
+            .set_task_doing(created.id, true)
+            .await
+            .expect("set doing");
+        assert!(doing.doing);
+        assert!(!doing.completed);
+
+        let tracked = repository
+            .add_task_tracked_time(created.id, 90)
+            .await
+            .expect("tracked time");
+        assert_eq!(tracked.tracked_seconds, 90);
     }
 }

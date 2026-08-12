@@ -22,8 +22,18 @@ fn draw_task_list(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &App
         .tasks
         .iter()
         .map(|task| {
-            let checkbox = if task.completed { "[x]" } else { "[ ]" };
-            let content = format!("{checkbox} {}", task.title);
+            let checkbox = if task.completed {
+                "[x]"
+            } else if task.doing {
+                "[>]"
+            } else {
+                "[ ]"
+            };
+            let content = format!(
+                "{checkbox} {} ({})",
+                task.title,
+                format_duration(task.tracked_seconds)
+            );
             let style = if task.completed {
                 master_detail::inactive_style(app.theme)
             } else {
@@ -92,10 +102,21 @@ fn render_details_lines(task: &Task) -> Vec<Line<'static>> {
         Line::from(""),
         Line::from(vec![
             Span::styled("status: ", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(if task.completed { "completed" } else { "open" }),
+            Span::raw(if task.completed {
+                "completed"
+            } else if task.doing {
+                "doing"
+            } else {
+                "open"
+            }),
         ]),
         Line::from(""),
-        Line::from("e edit  space toggle  d delete"),
+        Line::from(vec![
+            Span::styled("tracked: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(format_duration(task.tracked_seconds)),
+        ]),
+        Line::from(""),
+        Line::from("e edit  space toggle done  m mark doing  d delete"),
     ]
 }
 
@@ -121,6 +142,12 @@ fn render_editor_lines(app: &AppState, mode: &TaskInputMode) -> Vec<Line<'static
         Line::from(""),
         Line::from("enter next field/save  tab switch field  esc cancel"),
     ]
+}
+
+fn format_duration(total_seconds: u64) -> String {
+    let minutes = total_seconds / 60;
+    let seconds = total_seconds % 60;
+    format!("{minutes:02}:{seconds:02}")
 }
 
 fn editor_title(mode: &TaskInputMode) -> &'static str {

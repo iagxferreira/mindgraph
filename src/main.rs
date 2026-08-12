@@ -9,8 +9,8 @@ use futures_util::StreamExt;
 use mindgraph::{
     app::{AppAction, AppEvent, AppState},
     services::{
-        NoteService, NoteServiceImpl, TaskService, TaskServiceImpl, VaultService, VaultServiceImpl,
-        WorkspaceService, WorkspaceServiceImpl,
+        NoteService, NoteServiceImpl, PomodoroService, PomodoroServiceImpl, TaskService,
+        TaskServiceImpl, VaultService, VaultServiceImpl, WorkspaceService, WorkspaceServiceImpl,
     },
     storage::database::Database,
     ui,
@@ -39,6 +39,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     let database = Database::open_default().await?;
     let vault_service = VaultServiceImpl::new(database.vault_repository());
     let note_service = NoteServiceImpl::new(database.note_repository());
+    let pomodoro_service = PomodoroServiceImpl::new(database.pomodoro_repository());
     let task_service = TaskServiceImpl::new(database.task_repository());
     let workspace_service = WorkspaceServiceImpl::new(database.workspace_repository());
 
@@ -48,6 +49,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         &mut app,
         &vault_service,
         &note_service,
+        &pomodoro_service,
         &task_service,
         &workspace_service,
         startup_actions,
@@ -67,6 +69,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                     &mut app,
                     &vault_service,
                     &note_service,
+                    &pomodoro_service,
                     &task_service,
                     &workspace_service,
                     actions,
@@ -81,6 +84,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
                             &mut app,
                             &vault_service,
                             &note_service,
+                            &pomodoro_service,
                             &task_service,
                             &workspace_service,
                             actions,
@@ -105,6 +109,7 @@ async fn process_actions(
     app: &mut AppState,
     vault_service: &VaultServiceImpl,
     note_service: &NoteServiceImpl,
+    pomodoro_service: &PomodoroServiceImpl,
     task_service: &TaskServiceImpl,
     workspace_service: &WorkspaceServiceImpl,
     actions: Vec<AppAction>,
@@ -134,6 +139,10 @@ async fn process_actions(
             AppAction::LoadTasks => {
                 let tasks = task_service.list_tasks().await?;
                 app.apply(AppEvent::TasksLoaded(tasks))
+            }
+            AppAction::LoadPomodoroSessions => {
+                let sessions = pomodoro_service.list_sessions().await?;
+                app.apply(AppEvent::PomodoroSessionsLoaded(sessions))
             }
             AppAction::LoadWorkspaces => {
                 let workspaces = workspace_service.list_workspaces().await?;
@@ -188,6 +197,31 @@ async fn process_actions(
             AppAction::DeleteTask { task_id } => {
                 task_service.delete_task(task_id).await?;
                 app.apply(AppEvent::TaskDeleted(task_id))
+            }
+            AppAction::SetTaskDoing { task_id, doing } => {
+                let task = task_service.set_task_doing(task_id, doing).await?;
+                app.apply(AppEvent::TaskUpdated(task))
+            }
+            AppAction::AddTaskTrackedTime {
+                task_id,
+                tracked_seconds,
+            } => {
+                let task = task_service
+                    .add_task_tracked_time(task_id, tracked_seconds)
+                    .await?;
+                app.apply(AppEvent::TaskUpdated(task))
+            }
+            AppAction::CreatePomodoroSession { session } => {
+                let saved = pomodoro_service
+                    .create_session(
+                        session.task_id,
+                        session.phase,
+                        session.started_at_unix,
+                        session.stopped_at_unix,
+                        session.elapsed_seconds,
+                    )
+                    .await?;
+                app.apply(AppEvent::PomodoroSessionCreated(saved))
             }
             AppAction::CreateWorkspace { name, path } => {
                 let workspace = workspace_service.create_workspace(name, path).await?;
