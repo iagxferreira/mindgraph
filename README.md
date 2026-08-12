@@ -4,8 +4,6 @@ Forge is a terminal-native productivity environment for software engineers, buil
 
 ## Preview
 
-Place a screenshot at `assets/screenshots/forge-dashboard.png` and the README will render it here:
-
 ![Forge dashboard screenshot](assets/screenshots/forge-dashboard.png)
 
 ## Features
@@ -46,7 +44,7 @@ FORGE_DB_PATH=./forge.db cargo run
 
 Forge opens in the terminal’s alternate screen. Use the keyboard shortcuts below to move between screens and manage tasks without leaving the TUI.
 
-The first screen is the dashboard. Press `Tab` to move through Tasks, Notifications, and Workspaces. The task list is persisted automatically through SQLite, so changes remain available across launches when you use a stable `FORGE_DB_PATH`.
+The first screen is the dashboard. Press `Ctrl+L` to move forward through Tasks, Notifications, and Workspaces, and `Ctrl+H` to move backward. The task list is persisted automatically through SQLite, so changes remain available across launches when you use a stable `FORGE_DB_PATH`.
 
 ## Development Commands
 
@@ -59,7 +57,8 @@ cargo clippy --all-targets --all-features
 
 ## Controls
 
-- `Tab` switch screens
+- `Ctrl+L` next screen
+- `Ctrl+H` previous screen
 - `j` / `k` or arrow keys move task selection
 - `space` toggle the selected task
 - `a` add a task
