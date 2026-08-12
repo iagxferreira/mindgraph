@@ -1,20 +1,71 @@
 use ratatui::{
     Frame,
+    layout::{Constraint, Direction, Layout},
     style::{Modifier, Style},
     text::{Line, Span},
-    widgets::ListItem,
+    widgets::{Block, Borders, ListItem, Paragraph},
 };
 
 use crate::{
-    app::{AppState, RunState, Theme, WorkItem},
+    app::{AppState, PomodoroPhase, PomodoroSession, RunState, Theme, WorkItem},
     ui::widgets::master_detail,
 };
 
 pub fn draw(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState) {
-    let [list_area, detail_area] = master_detail::split(area);
+    let sections = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(7), Constraint::Min(0)])
+        .split(area);
 
-    draw_work_item_list(frame, list_area, app);
-    draw_dashboard_panel(frame, detail_area, app);
+    draw_summary(frame, sections[0], app);
+
+    let body = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([Constraint::Percentage(42), Constraint::Percentage(58)])
+        .split(sections[1]);
+
+    let left = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
+        .split(body[0]);
+
+    let right = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(46), Constraint::Percentage(54)])
+        .split(body[1]);
+
+    draw_work_item_list(frame, left[0], app);
+    draw_task_list(frame, left[1], app);
+    draw_pomodoro_list(frame, right[0], app);
+    draw_work_item_panel(frame, right[1], app);
+}
+
+fn draw_summary(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState) {
+    let summary = Paragraph::new(vec![
+        Line::from(vec![
+            Span::styled("work items ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(format!("{}", app.work_items.len())),
+            Span::raw("  tasks "),
+            Span::raw(format!("{}", app.tasks.len())),
+            Span::raw("  sessions "),
+            Span::raw(format!("{}", app.pomodoro_sessions.len())),
+        ]),
+        Line::from(""),
+        Line::from("dashboard"),
+        Line::from("  j/k move work items  enter open run  : scoped menu"),
+        Line::from("  work items, tasks, and pomodoro sessions share the same workspace"),
+    ])
+    .block(Block::default().borders(Borders::ALL).title("control room"))
+    .style(style_for_theme(app.theme));
+
+    frame.render_widget(summary, area);
+}
+
+fn style_for_theme(theme: Theme) -> Style {
+    match theme {
+        Theme::Ember => Style::default(),
+        Theme::Slate => Style::default(),
+    }
 }
 
 fn draw_work_item_list(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState) {
@@ -39,11 +90,52 @@ fn draw_work_item_list(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app:
     );
 }
 
-fn draw_dashboard_panel(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState) {
+fn draw_task_list(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState) {
+    let items = app
+        .tasks
+        .iter()
+        .map(|task| {
+            let label = format!(
+                "#{} {}{}",
+                task.id,
+                task.title,
+                if task.doing { " [doing]" } else { "" }
+            );
+            ListItem::new(Span::styled(
+                label,
+                style_for_task(app.theme, task.completed, task.doing),
+            ))
+        })
+        .collect::<Vec<_>>();
+
+    master_detail::render_list(frame, area, "tasks", items, app.selected_task, app.theme);
+}
+
+fn draw_pomodoro_list(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState) {
+    let items = app
+        .pomodoro_sessions
+        .iter()
+        .map(|session| {
+            let label = render_session_label(session);
+            ListItem::new(Span::styled(label, style_for_session(session)))
+        })
+        .collect::<Vec<_>>();
+
+    master_detail::render_list(
+        frame,
+        area,
+        "pomodoro sessions",
+        items,
+        app.selected_pomodoro_session,
+        app.theme,
+    );
+}
+
+fn draw_work_item_panel(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState) {
     master_detail::render_panel(
         frame,
         area,
-        "work item",
+        "selected work item",
         match selected_work_item(app) {
             Some(work_item) => render_overview_lines(app, work_item),
             None => vec![
@@ -130,6 +222,36 @@ fn style_for_work_item(theme: Theme, work_item: &WorkItem) -> Style {
     } else {
         master_detail::inactive_style(theme)
     }
+}
+
+fn style_for_task(theme: Theme, completed: bool, doing: bool) -> Style {
+    if doing {
+        master_detail::panel_style(theme)
+    } else if completed {
+        master_detail::inactive_style(theme)
+    } else {
+        master_detail::inactive_style(theme)
+    }
+}
+
+fn style_for_session(session: &PomodoroSession) -> Style {
+    match session.phase {
+        PomodoroPhase::Work => Style::default().add_modifier(Modifier::BOLD),
+        PomodoroPhase::Break => Style::default(),
+    }
+}
+
+fn render_session_label(session: &PomodoroSession) -> String {
+    let phase = match session.phase {
+        PomodoroPhase::Work => "work",
+        PomodoroPhase::Break => "break",
+    };
+
+    format!(
+        "#{id} {phase} {duration}",
+        id = session.id,
+        duration = format_duration(u64::from(session.elapsed_seconds))
+    )
 }
 
 fn run_state_label(state: RunState) -> &'static str {
