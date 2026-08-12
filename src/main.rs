@@ -1,5 +1,6 @@
 use std::{
     io,
+    io::IsTerminal,
     time::Duration,
 };
 
@@ -26,6 +27,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
+    if !io::stdout().is_terminal() {
+        return Err("Forge requires an interactive terminal".into());
+    }
+
     enable_raw_mode()?;
     execute!(io::stdout(), EnterAlternateScreen)?;
 
