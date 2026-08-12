@@ -108,11 +108,8 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
         Screen::Mind if app.mind_draft.is_some() => {
             hints.extend([
                 Span::raw("  •  "),
-                Span::styled("enter", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(": next field/newline"),
-                Span::raw("  •  "),
                 Span::styled("tab", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(": switch field"),
+                Span::raw(": insert spaces"),
                 Span::raw("  •  "),
                 Span::styled("ctrl+s", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(": save"),

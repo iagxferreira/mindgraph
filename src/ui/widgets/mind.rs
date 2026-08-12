@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::{AppState, MindDraft, MindDraftField, MindDraftMode, MindSelection, Note},
+    app::{AppState, MindDraft, MindDraftMode, MindSelection, Note},
     ui::widgets::master_detail::{highlight_style, inactive_style, panel_style},
 };
 
@@ -133,19 +133,14 @@ fn draw_editor(
     app: &AppState,
     draft: &MindDraft,
 ) {
-    let mut lines = Vec::new();
-
-    lines.push(Line::from(vec![Span::styled(
+    let mut lines = vec![Line::from(vec![Span::styled(
         match draft.mode {
             MindDraftMode::Creating { .. } => "new markdown note",
             MindDraftMode::Editing { .. } => "edit markdown note",
         },
         Style::default().add_modifier(Modifier::BOLD),
-    )]));
-    lines.push(Line::from(""));
+    )])];
 
-    let title_focus = matches!(draft.focus, MindDraftField::Title);
-    lines.push(focus_line("title", &draft.title, title_focus));
     lines.push(Line::from(""));
 
     let location = match draft.mode {
@@ -158,23 +153,21 @@ fn draw_editor(
     };
     lines.push(Line::from(location));
     lines.push(Line::from(""));
-    lines.push(Line::from(vec![Span::styled(
-        "content: markdown",
-        Style::default().add_modifier(Modifier::BOLD),
-    )]));
-    lines.push(Line::from(""));
 
-    if draft.content.trim().is_empty() {
-        lines.push(Line::from("write markdown here"));
+    let mut document_lines: Vec<Line<'static>> = if draft.document.trim().is_empty() {
+        vec![Line::from("write markdown here")]
     } else {
-        for line in draft.content.lines() {
-            lines.push(Line::from(format!("  {line}")));
-        }
-    }
+        draft
+            .document
+            .lines()
+            .map(|line| Line::from(line.to_string()))
+            .collect()
+    };
 
+    lines.append(&mut document_lines);
     lines.push(Line::from(""));
     lines.push(Line::from(
-        "enter next field/newline  tab switch field  ctrl+s save  esc cancel",
+        "type markdown directly  tab inserts spaces  ctrl+s save  esc cancel",
     ));
 
     let editor = Paragraph::new(lines)
@@ -182,18 +175,6 @@ fn draw_editor(
         .style(panel_style(app.theme));
 
     frame.render_widget(editor, area);
-}
-
-fn focus_line(label: &str, value: &str, focused: bool) -> Line<'static> {
-    let prefix = if focused { "> " } else { "  " };
-    Line::from(vec![
-        Span::styled(prefix, Style::default().add_modifier(Modifier::BOLD)),
-        Span::styled(
-            format!("{label}: "),
-            Style::default().add_modifier(Modifier::BOLD),
-        ),
-        Span::raw(value.to_string()),
-    ])
 }
 
 fn render_note_lines(note: &Note) -> Vec<Line<'static>> {

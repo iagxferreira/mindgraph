@@ -73,18 +73,10 @@ pub enum MindDraftMode {
     Editing { note_id: i64 },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum MindDraftField {
-    Title,
-    Content,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MindDraft {
     pub mode: MindDraftMode,
-    pub focus: MindDraftField,
-    pub title: String,
-    pub content: String,
+    pub document: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -455,11 +447,7 @@ impl AppState {
                 .unwrap_or_else(|| vec![AppAction::None]),
             KeyCode::Char('a') if self.active_screen == Screen::Mind => {
                 if let Some(vault_id) = self.selected_mind_vault_id() {
-                    self.begin_mind_draft(
-                        MindDraftMode::Creating { vault_id },
-                        String::new(),
-                        String::new(),
-                    );
+                    self.begin_mind_draft(MindDraftMode::Creating { vault_id }, "# Untitled\n\n".to_string());
                 } else {
                     self.status_line = "select a vault first".to_string();
                 }
@@ -472,8 +460,7 @@ impl AppState {
                         if let Some(note) = self.notes.iter().find(|note| note.id == note_id) {
                             self.begin_mind_draft(
                                 MindDraftMode::Editing { note_id },
-                                note.title.clone(),
-                                note.content.clone(),
+                                markdown_note_document_from(note),
                             );
                         }
                     }
@@ -1036,12 +1023,10 @@ impl AppState {
         self.workspace_input_path.clear();
     }
 
-    fn begin_mind_draft(&mut self, mode: MindDraftMode, title: String, content: String) {
+    fn begin_mind_draft(&mut self, mode: MindDraftMode, document: String) {
         self.mind_draft = Some(MindDraft {
-            focus: MindDraftField::Title,
             mode: mode.clone(),
-            title,
-            content,
+            document,
         });
         self.status_line = match mode {
             MindDraftMode::Creating { .. } => "creating note: ctrl+s saves markdown".to_string(),
@@ -1066,9 +1051,9 @@ impl AppState {
 
         match key.code {
             KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                let title = normalized_note_title(&draft.title);
+                let title = markdown_note_title(&draft.document);
                 let slug = slugify(&title);
-                let content = draft.content.clone();
+                let content = draft.document.clone();
 
                 match draft.mode.clone() {
                     MindDraftMode::Creating { vault_id } => vec![AppAction::CreateNote {
@@ -1085,40 +1070,24 @@ impl AppState {
                     }],
                 }
             }
-            KeyCode::Enter => match draft.focus {
-                MindDraftField::Title => {
-                    draft.focus = MindDraftField::Content;
-                    vec![AppAction::None]
-                }
-                MindDraftField::Content => {
-                    draft.content.push('\n');
-                    vec![AppAction::None]
-                }
-            },
-            KeyCode::Tab | KeyCode::Down => {
-                draft.focus = match draft.focus {
-                    MindDraftField::Title => MindDraftField::Content,
-                    MindDraftField::Content => MindDraftField::Title,
-                };
+            KeyCode::Enter => {
+                draft.document.push('\n');
                 vec![AppAction::None]
             }
-            KeyCode::BackTab | KeyCode::Up => {
-                draft.focus = match draft.focus {
-                    MindDraftField::Title => MindDraftField::Content,
-                    MindDraftField::Content => MindDraftField::Title,
-                };
+            KeyCode::Tab => {
+                draft.document.push_str("    ");
                 vec![AppAction::None]
             }
             KeyCode::Backspace => {
-                self.delete_mind_draft_char();
+                draft.document.pop();
                 vec![AppAction::None]
             }
             KeyCode::Char('h') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                self.delete_mind_draft_char();
+                draft.document.pop();
                 vec![AppAction::None]
             }
             KeyCode::Char(c) => {
-                self.push_mind_draft_char(c);
+                draft.document.push(c);
                 vec![AppAction::None]
             }
             _ => vec![AppAction::None],
@@ -1244,28 +1213,6 @@ impl AppState {
         }
     }
 
-    fn push_mind_draft_char(&mut self, c: char) {
-        if let Some(draft) = self.mind_draft.as_mut() {
-            match draft.focus {
-                MindDraftField::Title => draft.title.push(c),
-                MindDraftField::Content => draft.content.push(c),
-            }
-        }
-    }
-
-    fn delete_mind_draft_char(&mut self) {
-        if let Some(draft) = self.mind_draft.as_mut() {
-            match draft.focus {
-                MindDraftField::Title => {
-                    draft.title.pop();
-                }
-                MindDraftField::Content => {
-                    draft.content.pop();
-                }
-            }
-        }
-    }
-
     fn delete_task_input_char(&mut self) {
         match self.task_input_focus {
             TaskInputField::Title => {
@@ -1363,6 +1310,30 @@ fn normalized_note_title(title: &str) -> String {
         "Untitled".to_string()
     } else {
         trimmed.to_string()
+    }
+}
+
+fn markdown_note_title(document: &str) -> String {
+    for line in document.lines() {
+        let trimmed = line.trim();
+        if let Some(title) = trimmed.strip_prefix("# ") {
+            return normalized_note_title(title);
+        }
+        if !trimmed.is_empty() {
+            return normalized_note_title(trimmed);
+        }
+    }
+
+    "Untitled".to_string()
+}
+
+fn markdown_note_document_from(note: &Note) -> String {
+    if note.content.trim_start().starts_with("# ") {
+        note.content.clone()
+    } else if note.content.trim().is_empty() {
+        format!("# {}\n\n", note.title)
+    } else {
+        format!("# {}\n\n{}", note.title, note.content)
     }
 }
 
