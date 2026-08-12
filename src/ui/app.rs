@@ -9,7 +9,7 @@ use ratatui::{
 
 use crate::{
     app::{AppState, Screen, Theme},
-    ui::widgets::{dashboard, tasks},
+    ui::widgets::{dashboard, tasks, workspaces},
 };
 
 pub fn draw(frame: &mut Frame<'_>, app: &AppState) {
@@ -25,7 +25,7 @@ pub fn draw(frame: &mut Frame<'_>, app: &AppState) {
         Screen::Dashboard => dashboard::draw(frame, chunks[1], app),
         Screen::Tasks => tasks::draw(frame, chunks[1], app),
         Screen::Notifications => dashboard::draw(frame, chunks[1], app),
-        Screen::Workspaces => dashboard::draw(frame, chunks[1], app),
+        Screen::Workspaces => workspaces::draw(frame, chunks[1], app),
     }
 
     draw_command_bar(frame, chunks[2], app);
@@ -98,6 +98,19 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
                 Span::raw(": cancel"),
             ]);
         }
+        Screen::Workspaces if app.workspace_input_mode.is_some() => {
+            hints.extend([
+                Span::raw("  •  "),
+                Span::styled("enter", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": next field/save"),
+                Span::raw("  •  "),
+                Span::styled("tab", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": switch field"),
+                Span::raw("  •  "),
+                Span::styled("esc", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": cancel"),
+            ]);
+        }
         Screen::Tasks => {
             hints.extend([
                 Span::raw("  •  "),
@@ -140,6 +153,20 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
                 Span::raw(": move"),
             ]);
         }
+    }
+
+    if matches!(app.active_screen, Screen::Workspaces) {
+        hints.extend([
+            Span::raw("  •  "),
+            Span::styled("a", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(": add"),
+            Span::raw("  •  "),
+            Span::styled("e/enter", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(": edit"),
+            Span::raw("  •  "),
+            Span::styled("d", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(": delete"),
+        ]);
     }
 
     hints

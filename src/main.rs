@@ -12,7 +12,7 @@ use crossterm::{
 use futures_util::StreamExt;
 use forge::{
     app::{AppAction, AppEvent, AppState},
-    services::{TaskService, TaskServiceImpl},
+    services::{TaskService, TaskServiceImpl, WorkspaceService, WorkspaceServiceImpl},
     storage::database::Database,
     ui,
 };
@@ -39,10 +39,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 
     let database = Database::open_default().await?;
     let task_service = TaskServiceImpl::new(database.task_repository());
+    let workspace_service = WorkspaceServiceImpl::new(database.workspace_repository());
 
     let mut app = AppState::new();
     let startup_actions = app.apply(AppEvent::Started);
-    process_actions(&mut app, &task_service, startup_actions).await?;
+    process_actions(&mut app, &task_service, &workspace_service, startup_actions).await?;
 
     let mut events = EventStream::new();
     let mut tick = tokio::time::interval(Duration::from_secs(1));
@@ -53,13 +54,13 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         tokio::select! {
             _ = tick.tick() => {
                 let actions = app.apply(AppEvent::Tick);
-                process_actions(&mut app, &task_service, actions).await?;
+                process_actions(&mut app, &task_service, &workspace_service, actions).await?;
             }
             maybe_event = events.next() => {
                 if let Some(Ok(event)) = maybe_event {
                     if let CrosstermEvent::Key(key) = event {
                         let actions = app.apply(AppEvent::Key(key));
-                        process_actions(&mut app, &task_service, actions).await?;
+                        process_actions(&mut app, &task_service, &workspace_service, actions).await?;
                     } else if let CrosstermEvent::Resize(_, _) = event {
                         app.apply(AppEvent::Resize);
                     }
@@ -78,6 +79,7 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
 async fn process_actions(
     app: &mut AppState,
     task_service: &TaskServiceImpl,
+    workspace_service: &WorkspaceServiceImpl,
     actions: Vec<AppAction>,
 ) -> Result<(), Box<dyn std::error::Error>> {
     for action in actions {
@@ -85,6 +87,10 @@ async fn process_actions(
             AppAction::LoadTasks => {
                 let tasks = task_service.list_tasks().await?;
                 app.apply(AppEvent::TasksLoaded(tasks));
+            }
+            AppAction::LoadWorkspaces => {
+                let workspaces = workspace_service.list_workspaces().await?;
+                app.apply(AppEvent::WorkspacesLoaded(workspaces));
             }
             AppAction::CreateTask { title, description } => {
                 let task = task_service.create_task(title, description).await?;
@@ -107,6 +113,24 @@ async fn process_actions(
             AppAction::DeleteTask { task_id } => {
                 task_service.delete_task(task_id).await?;
                 app.apply(AppEvent::TaskDeleted(task_id));
+            }
+            AppAction::CreateWorkspace { name, path } => {
+                let workspace = workspace_service.create_workspace(name, path).await?;
+                app.apply(AppEvent::WorkspaceCreated(workspace));
+            }
+            AppAction::UpdateWorkspace {
+                workspace_id,
+                name,
+                path,
+            } => {
+                let workspace = workspace_service
+                    .update_workspace(workspace_id, name, path)
+                    .await?;
+                app.apply(AppEvent::WorkspaceUpdated(workspace));
+            }
+            AppAction::DeleteWorkspace { workspace_id } => {
+                workspace_service.delete_workspace(workspace_id).await?;
+                app.apply(AppEvent::WorkspaceDeleted(workspace_id));
             }
             AppAction::ShowMessage(message) => {
                 app.apply(AppEvent::Message(message));
