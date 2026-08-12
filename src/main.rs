@@ -5,7 +5,7 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use forge::{
+use mindgraph::{
     app::{AppAction, AppEvent, AppState},
     services::{TaskService, TaskServiceImpl, WorkspaceService, WorkspaceServiceImpl},
     storage::database::Database,
@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 async fn run() -> Result<(), Box<dyn std::error::Error>> {
     if !io::stdout().is_terminal() {
-        return Err("Forge requires an interactive terminal".into());
+        return Err("MindGraph requires an interactive terminal".into());
     }
 
     enable_raw_mode()?;

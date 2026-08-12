@@ -5,7 +5,11 @@ use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
 };
 
-use crate::storage::{task_repository::TaskRepository, workspace_repository::WorkspaceRepository};
+use crate::storage::{
+    link_repository::LinkRepository, note_repository::NoteRepository,
+    task_repository::TaskRepository, vault_repository::VaultRepository,
+    workspace_repository::WorkspaceRepository,
+};
 
 #[derive(Clone)]
 pub struct Database {
@@ -36,6 +40,18 @@ impl Database {
         TaskRepository::new(self.pool.clone())
     }
 
+    pub fn vault_repository(&self) -> VaultRepository {
+        VaultRepository::new(self.pool.clone())
+    }
+
+    pub fn note_repository(&self) -> NoteRepository {
+        NoteRepository::new(self.pool.clone())
+    }
+
+    pub fn link_repository(&self) -> LinkRepository {
+        LinkRepository::new(self.pool.clone())
+    }
+
     pub fn workspace_repository(&self) -> WorkspaceRepository {
         WorkspaceRepository::new(self.pool.clone())
     }
@@ -57,6 +73,51 @@ pub async fn initialize(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .await?;
 
     ensure_task_description_column(pool).await?;
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS vaults (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            root_path TEXT NOT NULL,
+            created_at_unix INTEGER NOT NULL
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    ensure_default_vault(pool).await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS notes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            vault_id INTEGER NOT NULL,
+            title TEXT NOT NULL,
+            slug TEXT NOT NULL,
+            content TEXT NOT NULL DEFAULT '',
+            created_at_unix INTEGER NOT NULL,
+            updated_at_unix INTEGER NOT NULL
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS links (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_note_id INTEGER NOT NULL,
+            target_note_id INTEGER NOT NULL,
+            relationship TEXT NOT NULL DEFAULT 'references',
+            created_at_unix INTEGER NOT NULL
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
     sqlx::query(
         r#"
         CREATE TABLE IF NOT EXISTS workspaces (
@@ -112,12 +173,35 @@ async fn ensure_default_workspace(pool: &SqlitePool) -> Result<(), sqlx::Error> 
     Ok(())
 }
 
+async fn ensure_default_vault(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM vaults")
+        .fetch_one(pool)
+        .await?;
+
+    if count.0 == 0 {
+        sqlx::query(
+            r#"
+            INSERT INTO vaults (name, root_path, created_at_unix)
+            VALUES ('default', '.', strftime('%s', 'now'))
+            "#,
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
 fn default_database_path() -> PathBuf {
+    if let Ok(custom_path) = env::var("MINDGRAPH_DB_PATH") {
+        return PathBuf::from(custom_path);
+    }
+
     if let Ok(custom_path) = env::var("FORGE_DB_PATH") {
         return PathBuf::from(custom_path);
     }
 
     let mut path = env::temp_dir();
-    path.push("forge.db");
+    path.push("mindgraph.db");
     path
 }

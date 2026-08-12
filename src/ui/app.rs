@@ -2,62 +2,71 @@ use ratatui::{
     Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    symbols,
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Tabs, block::Title},
+    widgets::{Block, Borders, Paragraph},
 };
 
 use crate::{
     app::{AppState, Screen, Theme},
-    ui::widgets::{dashboard, tasks, workspaces},
+    ui::widgets::{dashboard, launcher, tasks, workspaces},
 };
 
 pub fn draw(frame: &mut Frame<'_>, app: &AppState) {
     let root = frame.area();
-    let chunks = Layout::default()
+    let shell = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
-            Constraint::Length(3),
+            Constraint::Length(4),
             Constraint::Min(0),
             Constraint::Length(2),
         ])
         .split(root);
 
-    draw_header(frame, chunks[0], app);
+    draw_header(frame, shell[0], app);
 
     match app.active_screen {
-        Screen::Dashboard => dashboard::draw(frame, chunks[1], app),
-        Screen::Tasks => tasks::draw(frame, chunks[1], app),
-        Screen::Notifications => dashboard::draw(frame, chunks[1], app),
-        Screen::Workspaces => workspaces::draw(frame, chunks[1], app),
+        Screen::Dashboard => dashboard::draw(frame, shell[1], app),
+        Screen::Tasks => tasks::draw(frame, shell[1], app),
+        Screen::Notifications => dashboard::draw(frame, shell[1], app),
+        Screen::Workspaces => workspaces::draw(frame, shell[1], app),
     }
 
-    draw_command_bar(frame, chunks[2], app);
+    draw_command_bar(frame, shell[2], app);
+
+    if app.launcher.is_some() {
+        launcher::draw(frame, app);
+    }
 }
 
 fn draw_header(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
-    let titles = ["dashboard", "tasks", "notifications", "workspaces"]
-        .into_iter()
-        .map(Line::from)
-        .collect::<Vec<_>>();
+    let header = Paragraph::new(Line::from(vec![
+        Span::styled("mindgraph", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw("  "),
+        Span::raw("pane-first knowledge shell"),
+        Span::raw("  "),
+        Span::styled("screen: ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(screen_label(app.active_screen)),
+        Span::raw("  "),
+        Span::styled("tasks: ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(format!("{}", app.tasks.len())),
+        Span::raw("  "),
+        Span::styled(
+            "workspaces: ",
+            Style::default().add_modifier(Modifier::BOLD),
+        ),
+        Span::raw(format!("{}", app.workspaces.len())),
+        Span::raw("  "),
+        Span::styled("palette: ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(if app.launcher.is_some() {
+            "open"
+        } else {
+            "closed"
+        }),
+    ]))
+    .block(Block::default().borders(Borders::BOTTOM))
+    .style(inactive_style(app.theme));
 
-    let tabs = Tabs::new(titles)
-        .select(match app.active_screen {
-            Screen::Dashboard => 0,
-            Screen::Tasks => 1,
-            Screen::Notifications => 2,
-            Screen::Workspaces => 3,
-        })
-        .block(
-            Block::default()
-                .borders(Borders::BOTTOM)
-                .title(Title::from("forge")),
-        )
-        .highlight_style(active_style(app.theme))
-        .divider(symbols::DOT)
-        .style(inactive_style(app.theme));
-
-    frame.render_widget(tabs, area);
+    frame.render_widget(header, area);
 }
 
 fn draw_command_bar(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
@@ -78,8 +87,11 @@ fn draw_command_bar(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
 
 fn command_hints(app: &AppState) -> Vec<Span<'static>> {
     let mut hints = vec![
+        Span::styled(":", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(": launcher"),
+        Span::raw("  •  "),
         Span::styled("ctrl+l", Style::default().add_modifier(Modifier::BOLD)),
-        Span::raw(": switch screen"),
+        Span::raw(": next screen"),
         Span::raw("  •  "),
         Span::styled("ctrl+h", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(": previous screen"),
@@ -163,6 +175,17 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
         }
     }
 
+    if app.launcher.is_some() {
+        hints.extend([
+            Span::raw("  •  "),
+            Span::styled("enter", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(": run"),
+            Span::raw("  •  "),
+            Span::styled("esc", Style::default().add_modifier(Modifier::BOLD)),
+            Span::raw(": close palette"),
+        ]);
+    }
+
     if matches!(app.active_screen, Screen::Workspaces) {
         hints.extend([
             Span::raw("  •  "),
@@ -180,16 +203,12 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
     hints
 }
 
-fn active_style(theme: Theme) -> Style {
-    match theme {
-        Theme::Ember => Style::default()
-            .fg(Color::Black)
-            .bg(Color::Yellow)
-            .add_modifier(Modifier::BOLD),
-        Theme::Slate => Style::default()
-            .fg(Color::Black)
-            .bg(Color::Cyan)
-            .add_modifier(Modifier::BOLD),
+fn screen_label(screen: Screen) -> &'static str {
+    match screen {
+        Screen::Dashboard => "dashboard",
+        Screen::Tasks => "tasks",
+        Screen::Notifications => "notifications",
+        Screen::Workspaces => "workspaces",
     }
 }
 

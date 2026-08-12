@@ -39,7 +39,9 @@ pub fn draw(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState)
         .constraints([Constraint::Percentage(58), Constraint::Percentage(42)])
         .split(sections[1]);
 
-    let content = Paragraph::new("dashboard is the command center for the first forge milestone.")
+    let content = Paragraph::new(
+        "a pane-driven workspace for tasks, notes, and graph navigation modeled after helix and git ui.",
+    )
         .block(Block::default().borders(Borders::ALL).title("overview"))
         .style(style_for_theme(app.theme));
     frame.render_widget(content, body_chunks[0]);

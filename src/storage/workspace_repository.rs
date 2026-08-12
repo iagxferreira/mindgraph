@@ -114,29 +114,29 @@ mod tests {
 
         let repository = WorkspaceRepository::new(pool);
         let created = repository
-            .create_workspace("forge".to_string(), "/tmp/forge".to_string())
+            .create_workspace("mindgraph".to_string(), "/tmp/mindgraph".to_string())
             .await
             .expect("create workspace");
 
-        assert_eq!(created.name, "forge");
-        assert_eq!(created.path, "/tmp/forge");
+        assert_eq!(created.name, "mindgraph");
+        assert_eq!(created.path, "/tmp/mindgraph");
 
         let updated = repository
             .update_workspace(
                 created.id,
-                "forge-rs".to_string(),
-                "/tmp/forge-rs".to_string(),
+                "mindgraph-rs".to_string(),
+                "/tmp/mindgraph-rs".to_string(),
             )
             .await
             .expect("update workspace");
-        assert_eq!(updated.name, "forge-rs");
-        assert_eq!(updated.path, "/tmp/forge-rs");
+        assert_eq!(updated.name, "mindgraph-rs");
+        assert_eq!(updated.path, "/tmp/mindgraph-rs");
 
         let workspaces = repository.list_workspaces().await.expect("list");
         assert!(
             workspaces
                 .iter()
-                .any(|workspace| workspace.name == "forge-rs")
+                .any(|workspace| workspace.name == "mindgraph-rs")
         );
     }
 }

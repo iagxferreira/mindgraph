@@ -29,6 +29,34 @@ pub struct Workspace {
     pub path: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Vault {
+    pub id: i64,
+    pub name: String,
+    pub root_path: String,
+    pub created_at_unix: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Note {
+    pub id: i64,
+    pub vault_id: i64,
+    pub title: String,
+    pub slug: String,
+    pub content: String,
+    pub created_at_unix: i64,
+    pub updated_at_unix: i64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Link {
+    pub id: i64,
+    pub source_note_id: i64,
+    pub target_note_id: i64,
+    pub relationship: String,
+    pub created_at_unix: i64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Theme {
     Ember,
@@ -75,6 +103,28 @@ pub enum WorkspaceInputField {
     Path,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LauncherTarget {
+    Screen(Screen),
+    ToggleTheme,
+    TogglePomodoro,
+    ResetPomodoro,
+    Quit,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LauncherEntry {
+    pub label: String,
+    pub hint: String,
+    pub target: LauncherTarget,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LauncherState {
+    pub query: String,
+    pub selected: usize,
+}
+
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub active_screen: Screen,
@@ -94,6 +144,7 @@ pub struct AppState {
     pub task_input_focus: TaskInputField,
     pub task_input_title: String,
     pub task_input_description: String,
+    pub launcher: Option<LauncherState>,
     pub should_quit: bool,
 }
 
@@ -128,6 +179,7 @@ impl AppState {
             task_input_focus: TaskInputField::Title,
             task_input_title: String::new(),
             task_input_description: String::new(),
+            launcher: None,
             should_quit: false,
         }
     }
@@ -211,6 +263,10 @@ impl AppState {
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> Vec<AppAction> {
+        if self.launcher.is_some() {
+            return self.handle_launcher_key(key);
+        }
+
         if self.workspace_input_mode.is_some() {
             return self.handle_workspace_input_key(key);
         }
@@ -241,6 +297,10 @@ impl AppState {
             KeyCode::Char('q') => {
                 self.should_quit = true;
                 vec![AppAction::ShowMessage("quitting".to_string())]
+            }
+            KeyCode::Char(':') => {
+                self.open_launcher();
+                vec![AppAction::None]
             }
             KeyCode::BackTab => {
                 self.active_screen = previous_screen(self.active_screen);
@@ -320,6 +380,85 @@ impl AppState {
             }
             KeyCode::Char('r') => {
                 self.reset_pomodoro();
+                vec![AppAction::None]
+            }
+            _ => vec![AppAction::None],
+        }
+    }
+
+    fn handle_launcher_key(&mut self, key: KeyEvent) -> Vec<AppAction> {
+        let Some(current_launcher) = self.launcher.clone() else {
+            return vec![AppAction::None];
+        };
+
+        match key.code {
+            KeyCode::Esc => {
+                self.close_launcher();
+                self.status_line = "launcher closed".to_string();
+                vec![AppAction::None]
+            }
+            KeyCode::Enter => {
+                let entries = self.filtered_launcher_entries();
+                let action = entries
+                    .get(current_launcher.selected)
+                    .map(|entry| entry.target);
+                self.close_launcher();
+                match action {
+                    Some(LauncherTarget::Screen(screen)) => {
+                        self.active_screen = screen;
+                        self.status_line = format!("switched to {}", screen_label(screen));
+                    }
+                    Some(LauncherTarget::ToggleTheme) => {
+                        self.theme = match self.theme {
+                            Theme::Ember => Theme::Slate,
+                            Theme::Slate => Theme::Ember,
+                        };
+                        self.status_line = "theme switched".to_string();
+                    }
+                    Some(LauncherTarget::TogglePomodoro) => {
+                        self.toggle_pomodoro();
+                    }
+                    Some(LauncherTarget::ResetPomodoro) => {
+                        self.reset_pomodoro();
+                    }
+                    Some(LauncherTarget::Quit) => {
+                        self.should_quit = true;
+                        self.status_line = "quitting".to_string();
+                        return vec![AppAction::ShowMessage("quitting".to_string())];
+                    }
+                    None => {
+                        self.status_line = "launcher empty".to_string();
+                    }
+                }
+                vec![AppAction::None]
+            }
+            KeyCode::Up | KeyCode::Char('k') => {
+                if let Some(launcher) = self.launcher.as_mut() {
+                    launcher.selected = launcher.selected.saturating_sub(1);
+                }
+                vec![AppAction::None]
+            }
+            KeyCode::Down | KeyCode::Char('j') => {
+                let len = self.filtered_launcher_entries().len();
+                if let Some(launcher) = self.launcher.as_mut() {
+                    if len > 0 {
+                        launcher.selected = (launcher.selected + 1).min(len - 1);
+                    }
+                }
+                vec![AppAction::None]
+            }
+            KeyCode::Backspace => {
+                if let Some(launcher) = self.launcher.as_mut() {
+                    launcher.query.pop();
+                    launcher.selected = 0;
+                }
+                vec![AppAction::None]
+            }
+            KeyCode::Char(c) => {
+                if let Some(launcher) = self.launcher.as_mut() {
+                    launcher.query.push(c);
+                    launcher.selected = 0;
+                }
                 vec![AppAction::None]
             }
             _ => vec![AppAction::None],
@@ -545,6 +684,95 @@ impl AppState {
         self.workspace_input_path.clear();
     }
 
+    fn open_launcher(&mut self) {
+        self.launcher = Some(LauncherState {
+            query: String::new(),
+            selected: 0,
+        });
+        self.status_line = "launcher open".to_string();
+    }
+
+    fn close_launcher(&mut self) {
+        self.launcher = None;
+    }
+
+    pub fn filtered_launcher_entries(&self) -> Vec<LauncherEntry> {
+        let query = self
+            .launcher
+            .as_ref()
+            .map(|launcher| launcher.query.trim().to_lowercase())
+            .unwrap_or_default();
+
+        let entries = self.launcher_entries();
+        if query.is_empty() {
+            return entries;
+        }
+
+        entries
+            .into_iter()
+            .filter(|entry| {
+                let label = entry.label.to_lowercase();
+                let hint = entry.hint.to_lowercase();
+                label.contains(&query) || hint.contains(&query)
+            })
+            .collect()
+    }
+
+    fn launcher_entries(&self) -> Vec<LauncherEntry> {
+        vec![
+            LauncherEntry {
+                label: "dashboard".to_string(),
+                hint: "overview".to_string(),
+                target: LauncherTarget::Screen(Screen::Dashboard),
+            },
+            LauncherEntry {
+                label: "tasks".to_string(),
+                hint: format!("{} items", self.tasks.len()),
+                target: LauncherTarget::Screen(Screen::Tasks),
+            },
+            LauncherEntry {
+                label: "notifications".to_string(),
+                hint: format!("{} alerts", self.notifications.len()),
+                target: LauncherTarget::Screen(Screen::Notifications),
+            },
+            LauncherEntry {
+                label: "workspaces".to_string(),
+                hint: format!("{} contexts", self.workspaces.len()),
+                target: LauncherTarget::Screen(Screen::Workspaces),
+            },
+            LauncherEntry {
+                label: "toggle theme".to_string(),
+                hint: match self.theme {
+                    Theme::Ember => "ember -> slate".to_string(),
+                    Theme::Slate => "slate -> ember".to_string(),
+                },
+                target: LauncherTarget::ToggleTheme,
+            },
+            LauncherEntry {
+                label: if self.pomodoro.running {
+                    "pause pomodoro".to_string()
+                } else {
+                    "start pomodoro".to_string()
+                },
+                hint: format!(
+                    "{} remaining",
+                    format_duration(self.pomodoro.remaining_seconds)
+                ),
+                target: LauncherTarget::TogglePomodoro,
+            },
+            LauncherEntry {
+                label: "reset pomodoro".to_string(),
+                hint: "return to work phase".to_string(),
+                target: LauncherTarget::ResetPomodoro,
+            },
+            LauncherEntry {
+                label: "quit".to_string(),
+                hint: "close the app".to_string(),
+                target: LauncherTarget::Quit,
+            },
+        ]
+    }
+
     fn push_workspace_input_char(&mut self, c: char) {
         match self.workspace_input_focus {
             WorkspaceInputField::Name => self.workspace_input_name.push(c),
@@ -665,6 +893,12 @@ pub fn current_unix_timestamp() -> i64 {
         .unwrap_or_default()
 }
 
+fn format_duration(total_seconds: u32) -> String {
+    let minutes = total_seconds / 60;
+    let seconds = total_seconds % 60;
+    format!("{minutes:02}:{seconds:02}")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -747,6 +981,38 @@ mod tests {
         assert_eq!(state.task_input_mode, Some(TaskInputMode::Creating));
         assert_eq!(state.task_input_title, "");
         assert_eq!(state.task_input_description, "");
+    }
+
+    #[test]
+    fn colon_opens_launcher() {
+        let mut state = AppState::new();
+
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Char(':'),
+            KeyModifiers::NONE,
+        )));
+
+        assert!(state.launcher.is_some());
+    }
+
+    #[test]
+    fn launcher_filters_entries() {
+        let mut state = AppState::new();
+
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Char(':'),
+            KeyModifiers::NONE,
+        )));
+        for ch in "dash".chars() {
+            state.apply(AppEvent::Key(KeyEvent::new(
+                KeyCode::Char(ch),
+                KeyModifiers::NONE,
+            )));
+        }
+
+        let entries = state.filtered_launcher_entries();
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].label, "dashboard");
     }
 
     #[test]
