@@ -1,4 +1,5 @@
 use std::{
+    io::ErrorKind,
     fs,
     path::{Path, PathBuf},
 };
@@ -142,7 +143,11 @@ impl NoteRepository {
     }
 
     pub async fn read_note_document(&self, path: String) -> Result<String, StorageError> {
-        Ok(fs::read_to_string(path)?)
+        match fs::read_to_string(path) {
+            Ok(document) => Ok(document),
+            Err(error) if error.kind() == ErrorKind::NotFound => Ok(String::new()),
+            Err(error) => Err(error.into()),
+        }
     }
 }
 

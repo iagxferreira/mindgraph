@@ -1562,6 +1562,7 @@ impl AppState {
                 .unwrap_or_else(|| ".".to_string());
             self.mind_path_selection = Some(vault_root.clone());
             self.mind_path_expanded.insert(vault_root.clone());
+            self.sync_mind_path_selection();
             self.begin_mind_draft(
                 MindDraftMode::Creating { vault_id },
                 "Untitled".to_string(),
@@ -1910,7 +1911,9 @@ impl AppState {
     fn selected_mind_create_path_for_save(&self, title: &str) -> String {
         let directory = self
             .mind_path_selection
-            .clone()
+            .as_ref()
+            .filter(|path| Path::new(path).is_dir())
+            .cloned()
             .or_else(|| self.selected_mind_vault_root_path())
             .unwrap_or_else(|| ".".to_string());
 
@@ -1956,6 +1959,28 @@ impl AppState {
         self.mind_path_selection = Some(entries[next as usize].clone());
     }
 
+    fn sync_mind_path_selection(&mut self) {
+        let Some(root) = self.selected_mind_vault_root_path() else {
+            self.mind_path_selection = None;
+            return;
+        };
+
+        let entries = self.visible_mind_paths();
+        if entries.is_empty() {
+            self.mind_path_selection = Some(root);
+            return;
+        }
+
+        let selection = self
+            .mind_path_selection
+            .as_ref()
+            .filter(|selected| entries.iter().any(|entry| entry == *selected))
+            .cloned()
+            .unwrap_or_else(|| entries[0].clone());
+
+        self.mind_path_selection = Some(selection);
+    }
+
     fn collapse_mind_path_selection(&mut self) {
         let Some(selected) = self.mind_path_selection.clone() else {
             return;
@@ -1976,10 +2001,12 @@ impl AppState {
         };
 
         if !Path::new(&selected).is_dir() {
+            self.sync_mind_path_selection();
             return;
         }
 
         self.mind_path_expanded.insert(selected);
+        self.sync_mind_path_selection();
     }
 
     fn visible_mind_paths(&self) -> Vec<String> {
