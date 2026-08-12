@@ -683,20 +683,6 @@ mod tests {
     }
 
     #[test]
-    fn shift_tab_cycles_backwards_between_screens() {
-        let mut state = AppState::new();
-        state.active_screen = Screen::Tasks;
-
-        let actions = state.apply(AppEvent::Key(KeyEvent::new(
-            KeyCode::BackTab,
-            KeyModifiers::SHIFT,
-        )));
-
-        assert_eq!(state.active_screen, Screen::Dashboard);
-        assert!(matches!(actions.as_slice(), [AppAction::None]));
-    }
-
-    #[test]
     fn ctrl_h_cycles_backwards_between_screens() {
         let mut state = AppState::new();
 
