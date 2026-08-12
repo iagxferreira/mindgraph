@@ -220,6 +220,11 @@ pub enum LauncherTarget {
     OpenWorkspaceInput,
     EditWorkspace,
     DeleteWorkspace,
+    SelectOrCreateRunWorkItem,
+    StartRunWorkItem,
+    PauseRunWorkItem,
+    StopRunWorkItem,
+    DeleteRunWorkItem,
     ToggleTheme,
     TogglePomodoro,
     ResetPomodoro,
@@ -382,13 +387,17 @@ impl AppState {
             }
             AppEvent::WorkItemsLoaded(work_items) => {
                 self.work_items = work_items;
+                self.sort_work_items();
                 self.sync_work_item_selection();
                 self.status_line = format!("loaded {} work items", self.work_items.len());
                 vec![AppAction::None]
             }
             AppEvent::WorkItemCreated(work_item) => {
+                let work_item_id = work_item.id;
                 self.work_items.push(work_item);
-                self.sync_work_item_selection();
+                self.sort_work_items();
+                self.selected_work_item =
+                    self.work_items.iter().position(|item| item.id == work_item_id);
                 self.status_line = "work item created".to_string();
                 vec![AppAction::None]
             }
@@ -400,6 +409,8 @@ impl AppState {
                 {
                     *existing = work_item;
                 }
+                self.sort_work_items();
+                self.sync_work_item_selection();
                 self.status_line = "work item updated".to_string();
                 vec![AppAction::None]
             }
@@ -648,6 +659,21 @@ impl AppState {
                 self.delete_selected_workspace()
             }
             KeyCode::Char(' ') if self.active_screen == Screen::Workspaces => vec![AppAction::None],
+            KeyCode::Char('a') if self.active_screen == Screen::Run => {
+                self.select_or_create_run_work_item()
+            }
+            KeyCode::Char('r') if self.active_screen == Screen::Run => {
+                self.start_selected_run_work_item()
+            }
+            KeyCode::Char('p') if self.active_screen == Screen::Run => {
+                self.pause_selected_run_work_item()
+            }
+            KeyCode::Char('s') if self.active_screen == Screen::Run => {
+                self.stop_selected_run_work_item()
+            }
+            KeyCode::Char('d') if self.active_screen == Screen::Run => {
+                self.delete_selected_run_work_item()
+            }
             KeyCode::Char('p') => self.toggle_pomodoro(),
             KeyCode::Char('r') => self.reset_pomodoro(),
             _ => vec![AppAction::None],
@@ -713,6 +739,21 @@ impl AppState {
                     }
                     Some(LauncherTarget::DeleteWorkspace) => {
                         return self.delete_selected_workspace();
+                    }
+                    Some(LauncherTarget::SelectOrCreateRunWorkItem) => {
+                        return self.select_or_create_run_work_item();
+                    }
+                    Some(LauncherTarget::StartRunWorkItem) => {
+                        return self.start_selected_run_work_item();
+                    }
+                    Some(LauncherTarget::PauseRunWorkItem) => {
+                        return self.pause_selected_run_work_item();
+                    }
+                    Some(LauncherTarget::StopRunWorkItem) => {
+                        return self.stop_selected_run_work_item();
+                    }
+                    Some(LauncherTarget::DeleteRunWorkItem) => {
+                        return self.delete_selected_run_work_item();
                     }
                     Some(LauncherTarget::ToggleTheme) => {
                         self.theme = match self.theme {
@@ -1086,11 +1127,20 @@ impl AppState {
         if self.work_items.is_empty() {
             self.selected_work_item = None;
         } else {
-            self.selected_work_item = Some(
-                self.selected_work_item
-                    .unwrap_or(0)
-                    .min(self.work_items.len() - 1),
-            );
+            self.selected_work_item = self
+                .selected_work_item_id()
+                .and_then(|selected_id| {
+                    self.work_items
+                        .iter()
+                        .position(|item| item.id == selected_id)
+                })
+                .or_else(|| {
+                    Some(
+                        self.selected_work_item
+                            .unwrap_or(0)
+                            .min(self.work_items.len() - 1),
+                    )
+                });
         }
     }
 
@@ -1103,6 +1153,162 @@ impl AppState {
         let current = self.selected_work_item.unwrap_or(0) as isize;
         let next = (current + offset).clamp(0, self.work_items.len().saturating_sub(1) as isize);
         self.selected_work_item = Some(next as usize);
+    }
+
+    fn sort_work_items(&mut self) {
+        self.work_items.sort_by(|left, right| {
+            right
+                .updated_at_unix
+                .cmp(&left.updated_at_unix)
+                .then_with(|| right.created_at_unix.cmp(&left.created_at_unix))
+                .then_with(|| right.id.cmp(&left.id))
+        });
+    }
+
+    fn selected_work_item_id(&self) -> Option<i64> {
+        self.selected_work_item
+            .and_then(|index| self.work_items.get(index))
+            .map(|item| item.id)
+    }
+
+    fn selected_run_context(&self) -> Option<(i64, i64)> {
+        Some((self.selected_task_id()?, self.selected_mind_note_id()?))
+    }
+
+    fn select_or_create_run_work_item(&mut self) -> Vec<AppAction> {
+        let Some((task_id, note_id)) = self.selected_run_context() else {
+            self.status_line = "select a task and note first".to_string();
+            return vec![AppAction::None];
+        };
+
+        if let Some(index) = self
+            .work_items
+            .iter()
+            .position(|item| item.task_id == task_id && item.note_id == note_id)
+        {
+            self.selected_work_item = Some(index);
+            self.status_line = "run work item selected".to_string();
+            return vec![AppAction::None];
+        }
+
+        self.status_line = "creating work item for selected task and note".to_string();
+        vec![AppAction::CreateWorkItem { task_id, note_id }]
+    }
+
+    fn start_selected_run_work_item(&mut self) -> Vec<AppAction> {
+        let Some(index) = self.selected_work_item else {
+            self.status_line = "select a work item first".to_string();
+            return vec![AppAction::None];
+        };
+
+        let Some(work_item) = self.work_items.get(index).cloned() else {
+            self.status_line = "select a work item first".to_string();
+            return vec![AppAction::None];
+        };
+
+        if work_item.run_state == RunState::Running {
+            self.status_line = "work item already running".to_string();
+            return vec![AppAction::None];
+        }
+
+        self.pomodoro.task_id = Some(work_item.task_id);
+        self.pomodoro.running = true;
+        self.status_line = format!(
+            "running {} on {}",
+            work_item.task_id,
+            self.notes
+                .iter()
+                .find(|note| note.id == work_item.note_id)
+                .map(|note| note.title.clone())
+                .unwrap_or_else(|| "note".to_string())
+        );
+
+        vec![
+            AppAction::SetTaskDoing {
+                task_id: work_item.task_id,
+                doing: true,
+            },
+            AppAction::UpdateWorkItem {
+                work_item_id: work_item.id,
+                task_id: work_item.task_id,
+                note_id: work_item.note_id,
+                run_state: RunState::Running,
+                pomodoro_session_id: work_item.pomodoro_session_id,
+                started_at_unix: work_item.started_at_unix.or(Some(current_unix_timestamp())),
+                stopped_at_unix: None,
+                elapsed_seconds: work_item.elapsed_seconds,
+            },
+        ]
+    }
+
+    fn pause_selected_run_work_item(&mut self) -> Vec<AppAction> {
+        let Some(index) = self.selected_work_item else {
+            self.status_line = "select a work item first".to_string();
+            return vec![AppAction::None];
+        };
+
+        let Some(work_item) = self.work_items.get(index).cloned() else {
+            self.status_line = "select a work item first".to_string();
+            return vec![AppAction::None];
+        };
+
+        if work_item.run_state != RunState::Running {
+            self.status_line = "work item already paused".to_string();
+            return vec![AppAction::None];
+        }
+
+        self.pomodoro.running = false;
+        self.status_line = "run paused".to_string();
+
+        vec![AppAction::UpdateWorkItem {
+            work_item_id: work_item.id,
+            task_id: work_item.task_id,
+            note_id: work_item.note_id,
+            run_state: RunState::Paused,
+            pomodoro_session_id: work_item.pomodoro_session_id,
+            started_at_unix: work_item.started_at_unix,
+            stopped_at_unix: None,
+            elapsed_seconds: u64::from(self.pomodoro.elapsed_seconds),
+        }]
+    }
+
+    fn stop_selected_run_work_item(&mut self) -> Vec<AppAction> {
+        let Some(index) = self.selected_work_item else {
+            self.status_line = "select a work item first".to_string();
+            return vec![AppAction::None];
+        };
+
+        let Some(work_item) = self.work_items.get(index).cloned() else {
+            self.status_line = "select a work item first".to_string();
+            return vec![AppAction::None];
+        };
+
+        let elapsed_seconds = u64::from(self.pomodoro.elapsed_seconds).max(work_item.elapsed_seconds);
+        let mut actions = self.stop_pomodoro();
+        let started_at_unix = work_item.started_at_unix.or_else(|| {
+            let elapsed_seconds = elapsed_seconds.min(i64::MAX as u64) as i64;
+            Some(current_unix_timestamp().saturating_sub(elapsed_seconds))
+        });
+        actions.push(AppAction::UpdateWorkItem {
+            work_item_id: work_item.id,
+            task_id: work_item.task_id,
+            note_id: work_item.note_id,
+            run_state: RunState::Stopped,
+            pomodoro_session_id: work_item.pomodoro_session_id,
+            started_at_unix,
+            stopped_at_unix: Some(current_unix_timestamp()),
+            elapsed_seconds,
+        });
+        actions
+    }
+
+    fn delete_selected_run_work_item(&mut self) -> Vec<AppAction> {
+        self.selected_work_item_id()
+            .map(|work_item_id| vec![AppAction::DeleteWorkItem { work_item_id }])
+            .unwrap_or_else(|| {
+                self.status_line = "select a work item first".to_string();
+                vec![AppAction::None]
+            })
     }
 
     fn sync_mind_selection(&mut self) {
@@ -1904,7 +2110,6 @@ impl AppState {
                 },
             ],
             Screen::Notifications => vec![],
-            Screen::Run => vec![],
             Screen::Workspaces => vec![
                 LauncherEntry {
                     label: "add workspace".to_string(),
@@ -1928,6 +2133,33 @@ impl AppState {
                         Theme::Slate => "slate -> ember".to_string(),
                     },
                     target: LauncherTarget::ToggleTheme,
+                },
+            ],
+            Screen::Run => vec![
+                LauncherEntry {
+                    label: "create/select work item".to_string(),
+                    hint: "bind the selected task and note".to_string(),
+                    target: LauncherTarget::SelectOrCreateRunWorkItem,
+                },
+                LauncherEntry {
+                    label: "start run".to_string(),
+                    hint: "start the selected work item".to_string(),
+                    target: LauncherTarget::StartRunWorkItem,
+                },
+                LauncherEntry {
+                    label: "pause run".to_string(),
+                    hint: "pause the selected work item".to_string(),
+                    target: LauncherTarget::PauseRunWorkItem,
+                },
+                LauncherEntry {
+                    label: "stop run".to_string(),
+                    hint: "save elapsed time".to_string(),
+                    target: LauncherTarget::StopRunWorkItem,
+                },
+                LauncherEntry {
+                    label: "delete work item".to_string(),
+                    hint: "remove the selected work item".to_string(),
+                    target: LauncherTarget::DeleteRunWorkItem,
                 },
             ],
         };

@@ -209,6 +209,18 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
                 Span::raw("  •  "),
                 Span::styled("j/k", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(": move work items"),
+                Span::raw("  •  "),
+                Span::styled("a", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": bind task/note"),
+                Span::raw("  •  "),
+                Span::styled("r", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": start"),
+                Span::raw("  •  "),
+                Span::styled("p", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": pause"),
+                Span::raw("  •  "),
+                Span::styled("s", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": stop"),
             ]);
         }
         Screen::Mind => {

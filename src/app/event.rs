@@ -90,6 +90,19 @@ pub enum AppAction {
         task_id: i64,
         note_id: i64,
     },
+    SelectOrCreateWorkItem {
+        task_id: i64,
+        note_id: i64,
+    },
+    StartWorkItem {
+        work_item_id: i64,
+    },
+    PauseWorkItem {
+        work_item_id: i64,
+    },
+    StopWorkItem {
+        work_item_id: i64,
+    },
     UpdateWorkItem {
         work_item_id: i64,
         task_id: i64,

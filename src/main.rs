@@ -237,6 +237,12 @@ async fn process_actions(
                 let work_item = work_item_service.create_work_item(task_id, note_id).await?;
                 app.apply(AppEvent::WorkItemCreated(work_item))
             }
+            AppAction::SelectOrCreateWorkItem { .. }
+            | AppAction::StartWorkItem { .. }
+            | AppAction::PauseWorkItem { .. }
+            | AppAction::StopWorkItem { .. } => {
+                vec![AppAction::None]
+            }
             AppAction::UpdateWorkItem {
                 work_item_id,
                 task_id,

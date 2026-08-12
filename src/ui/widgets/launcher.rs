@@ -161,8 +161,16 @@ fn footer_hints(app: &AppState) -> Vec<Span<'static>> {
             }
             Screen::Run => {
                 hints.push(Span::raw("  •  "));
-                hints.push(Span::styled("j/k", accent_style()));
-                hints.push(Span::raw(" move work items"));
+                hints.push(Span::styled("a", accent_style()));
+                hints.push(Span::raw(" bind task/note  "));
+                hints.push(Span::styled("r", accent_style()));
+                hints.push(Span::raw(" start  "));
+                hints.push(Span::styled("p", accent_style()));
+                hints.push(Span::raw(" pause  "));
+                hints.push(Span::styled("s", accent_style()));
+                hints.push(Span::raw(" stop  "));
+                hints.push(Span::styled("d", accent_style()));
+                hints.push(Span::raw(" delete"));
             }
             Screen::Tasks => {
                 hints.push(Span::raw("  •  "));
