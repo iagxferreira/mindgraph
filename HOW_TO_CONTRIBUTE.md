@@ -18,10 +18,11 @@ If you need direct Cargo output, use `cargo test` or `cargo run`.
 
 ## Data Location
 
-MindGraph stores SQLite data in the system temp directory by default.
+MindGraph creates `~/.config/mindgraph/` on first launch.
 
-- Set `MINDGRAPH_DB_PATH` to use a fixed database path.
-- `FORGE_DB_PATH` still works for backward compatibility.
+- `config.json` stores app-level configuration.
+- `data.json` stores tasks, workspaces, vaults, notes, and links.
+- Set `MINDGRAPH_HOME` to use a different storage directory.
 
 ## Style
 
@@ -36,7 +37,7 @@ MindGraph stores SQLite data in the system temp directory by default.
 - Use `#[tokio::test]` for async repository or service tests.
 - Name tests by behavior, such as `repository_round_trip_persists_workspaces`.
 
-Focus coverage on reducer behavior, SQLite persistence, service logic, and non-trivial widget logic.
+Focus coverage on reducer behavior, file-backed persistence, service logic, and non-trivial widget logic.
 
 ## Commits
 

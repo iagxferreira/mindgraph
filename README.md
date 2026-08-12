@@ -2,12 +2,12 @@
 
 MindGraph is a pane-driven terminal workspace for tasks, workspaces, and lightweight knowledge management.
 
-It is built with Ratatui, persists data in SQLite, and keeps the main application flow in `src/app/`, `src/ui/`, `src/services/`, and `src/storage/`.
+It is built with Ratatui and keeps the main application flow in `src/app/`, `src/ui/`, `src/services/`, and `src/storage/`.
 
 ## What You Get
 
 - Dashboard, tasks, notifications, and workspaces screens
-- Task and workspace CRUD backed by SQLite
+- Task and workspace CRUD backed by JSON files
 - Launcher overlay for quick navigation and actions
 - Theme toggle and Pomodoro timer
 - Plugin trait surface for future extensions
@@ -18,9 +18,9 @@ It is built with Ratatui, persists data in SQLite, and keeps the main applicatio
 cargo run
 ```
 
-The database file is created automatically in the system temp directory.
+The first launch creates `~/.config/mindgraph/` with `config.json` and `data.json`.
 
-To pin the database location, set `MINDGRAPH_DB_PATH`. `FORGE_DB_PATH` is still accepted for backward compatibility.
+To change the storage location, set `MINDGRAPH_HOME` to a different directory.
 
 ## Useful Commands
 
@@ -44,7 +44,7 @@ make coverage
 - `src/app/` owns `AppState`, events, and reducer-style state changes
 - `src/ui/` renders screens and widgets
 - `src/services/` contains async service traits and implementations
-- `src/storage/` owns SQLite access and repositories
+- `src/storage/` owns JSON-backed persistence and repositories
 - `src/plugins/` defines the plugin trait surface
 
 ## Current Focus
