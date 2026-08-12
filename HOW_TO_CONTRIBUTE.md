@@ -4,6 +4,7 @@
 
 - Read [README.md](README.md) for the current product shape.
 - Read [ROADMAP.md](ROADMAP.md) to see what is intentionally in scope.
+- Read the current work-item and launcher behavior in `src/app/state.rs` if you are changing navigation or creation flow.
 - Prefer small changes that stay within one layer: app, UI, service, or storage.
 
 ## Local Workflow
@@ -24,6 +25,7 @@ MindGraph stores data in `~/.config/mindgraph/` by default.
 - `data.json` stores tasks, workspaces, vaults, notes, links, pomodoro sessions, and work items.
 - Set `MINDGRAPH_HOME` to use a different storage directory.
 - If `HOME` is unavailable, the fallback root is `./.mindgraph/`.
+- The storage directory is created on first launch if it does not already exist.
 
 ## Style
 
@@ -37,6 +39,7 @@ MindGraph stores data in `~/.config/mindgraph/` by default.
 - Use `#[test]` for synchronous logic.
 - Use `#[tokio::test]` for async repository or service tests.
 - Name tests by behavior, such as `repository_round_trip_persists_workspaces`.
+- When work-item flows change, add coverage for dashboard selection, launcher actions, and the task/note attachment path.
 
 Focus coverage on reducer behavior, file-backed persistence, service logic, and non-trivial widget logic.
 

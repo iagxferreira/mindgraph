@@ -8,9 +8,10 @@ It is built with Ratatui and keeps the main application flow in `src/app/`, `src
 
 - Dashboard, tasks, mind, run, pomodoro, notifications, and workspaces screens
 - File-backed persistence for tasks, workspaces, vaults, notes, links, pomodoro sessions, and work items
-- Launcher overlay for screen-scoped actions
-- Markdown note editing and filesystem-backed note paths
-- Work items that link a task to a note and track run state
+- Launcher overlay for screen-scoped actions and direct `goto` jumps by id
+- Markdown note editing with explicit title and filesystem path selection
+- Work items as the main work context, with optional task and note links plus linked Pomodoro sessions
+- Dashboard controls for creating tasks, selecting work items, and managing work sessions
 - Theme toggle and Pomodoro timer
 - Plugin trait surface for future extensions
 
@@ -21,6 +22,8 @@ cargo run
 ```
 
 By default MindGraph stores data in `~/.config/mindgraph/`.
+
+On first launch, MindGraph creates the storage directory structure if it does not already exist.
 
 - `config.json` stores app-level configuration.
 - `data.json` stores tasks, workspaces, vaults, notes, links, pomodoro sessions, and work items.
@@ -57,4 +60,5 @@ make coverage
 ## Current Focus
 
 The current product is a TUI shell for tasks, markdown notes, linked work items, workspaces, and Pomodoro tracking.
-The note workflow is file-backed, the run workflow links a task to a note, and the next polish work is around making those links easier to create and inspect.
+The dashboard now acts as the main work surface, the launcher supports screen-scoped commands plus direct id jumps, and work items can exist before their task or note is attached.
+The next polish work is around making those partial work items easier to inspect, attach, and resume.

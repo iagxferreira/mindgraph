@@ -7,21 +7,24 @@ This file tracks the next MindGraph milestones. Keep items small, shippable, and
 - MindGraph already ships as a Ratatui-based TUI shell.
 - The current user-facing surfaces are dashboard, tasks, mind, run, pomodoro, notifications, workspaces, launcher, and theme switching.
 - File-backed persistence already exists for tasks, workspaces, vaults, notes, links, pomodoro sessions, and work items.
-- Notes are stored as markdown files and work items now link a task to a note with persisted run state.
+- Notes are stored as markdown files with explicit title and filesystem path selection.
+- Work items are now the primary work context and can exist before their task or note is attached.
+- The dashboard is the main control surface for work items, tasks, and Pomodoro sessions.
+- The launcher supports scoped actions and direct `goto` jumps by id.
 - The plugin trait exists, but plugin loading and execution are not wired into the app.
 
 ## Next Milestone
 
-- Make work-item creation and inspection easier from the Run screen.
-- Surface linked work-item state on task and note screens.
-- Add direct task-to-note linking shortcuts where the current workflow still requires too many steps.
+- Add explicit attach and detach actions for task, note, and session links on a selected work item.
+- Make the work-item detail view the place to inspect and retarget the current task, note, and session history.
+- Reduce the number of steps required to create a fully linked work item from the dashboard.
 - Improve note search and backlinks now that the markdown model is stable.
 
 ## After That
 
 - Add search over notes, work items, and links.
 - Add daily notes and templates if the note model proves stable.
-- Decide whether tasks should remain distinct from notes or converge into a shared work-item model.
+- Decide whether tasks should remain distinct from notes or converge further into the work-item model.
 - Add workspace onboarding polish if the startup path still feels awkward.
 
 ## Later
