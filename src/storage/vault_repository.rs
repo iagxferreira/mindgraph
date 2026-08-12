@@ -1,69 +1,45 @@
-use sqlx::{FromRow, SqlitePool};
+use std::path::PathBuf;
 
-use crate::app::{Vault, current_unix_timestamp};
+use crate::{
+    app::Vault,
+    storage::{
+        database::{load_data, save_data},
+        error::StorageError,
+    },
+};
 
 #[derive(Clone)]
 pub struct VaultRepository {
-    pool: SqlitePool,
-}
-
-#[derive(Debug, FromRow)]
-struct VaultRow {
-    id: i64,
-    name: String,
-    root_path: String,
-    created_at_unix: i64,
-}
-
-impl From<VaultRow> for Vault {
-    fn from(row: VaultRow) -> Self {
-        Self {
-            id: row.id,
-            name: row.name,
-            root_path: row.root_path,
-            created_at_unix: row.created_at_unix,
-        }
-    }
+    root_dir: PathBuf,
 }
 
 impl VaultRepository {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(root_dir: PathBuf) -> Self {
+        Self { root_dir }
     }
 
-    pub async fn list_vaults(&self) -> Result<Vec<Vault>, sqlx::Error> {
-        let rows = sqlx::query_as::<_, VaultRow>(
-            r#"
-            SELECT id, name, root_path, created_at_unix
-            FROM vaults
-            ORDER BY id ASC
-            "#,
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows.into_iter().map(Vault::from).collect())
+    pub async fn list_vaults(&self) -> Result<Vec<Vault>, StorageError> {
+        let mut vaults = load_data(&self.root_dir)?.vaults;
+        vaults.sort_by(|left, right| left.id.cmp(&right.id));
+        Ok(vaults)
     }
 
     pub async fn create_vault(
         &self,
         name: String,
         root_path: String,
-    ) -> Result<Vault, sqlx::Error> {
-        let row = sqlx::query_as::<_, VaultRow>(
-            r#"
-            INSERT INTO vaults (name, root_path, created_at_unix)
-            VALUES (?1, ?2, ?3)
-            RETURNING id, name, root_path, created_at_unix
-            "#,
-        )
-        .bind(name)
-        .bind(root_path)
-        .bind(current_unix_timestamp())
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(row.into())
+    ) -> Result<Vault, StorageError> {
+        std::fs::create_dir_all(&root_path)?;
+        let mut data = load_data(&self.root_dir)?;
+        let vault = Vault {
+            id: data.allocate_vault_id(),
+            name,
+            root_path,
+            created_at_unix: crate::app::current_unix_timestamp(),
+        };
+        data.vaults.push(vault.clone());
+        save_data(&self.root_dir, &data)?;
+        Ok(vault)
     }
 
     pub async fn update_vault(
@@ -71,29 +47,37 @@ impl VaultRepository {
         vault_id: i64,
         name: String,
         root_path: String,
-    ) -> Result<Vault, sqlx::Error> {
-        let row = sqlx::query_as::<_, VaultRow>(
-            r#"
-            UPDATE vaults
-            SET name = ?2, root_path = ?3
-            WHERE id = ?1
-            RETURNING id, name, root_path, created_at_unix
-            "#,
-        )
-        .bind(vault_id)
-        .bind(name)
-        .bind(root_path)
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(row.into())
+    ) -> Result<Vault, StorageError> {
+        std::fs::create_dir_all(&root_path)?;
+        let mut data = load_data(&self.root_dir)?;
+        let vault = data
+            .vaults
+            .iter_mut()
+            .find(|current| current.id == vault_id)
+            .ok_or(StorageError::NotFound {
+                entity: "vault",
+                id: vault_id,
+            })?;
+        vault.name = name;
+        vault.root_path = root_path;
+        let updated = vault.clone();
+        save_data(&self.root_dir, &data)?;
+        Ok(updated)
     }
 
-    pub async fn delete_vault(&self, vault_id: i64) -> Result<(), sqlx::Error> {
-        sqlx::query("DELETE FROM vaults WHERE id = ?1")
-            .bind(vault_id)
-            .execute(&self.pool)
-            .await?;
+    pub async fn delete_vault(&self, vault_id: i64) -> Result<(), StorageError> {
+        let mut data = load_data(&self.root_dir)?;
+        let initial_len = data.vaults.len();
+        data.vaults.retain(|vault| vault.id != vault_id);
+
+        if data.vaults.len() == initial_len {
+            return Err(StorageError::NotFound {
+                entity: "vault",
+                id: vault_id,
+            });
+        }
+
+        save_data(&self.root_dir, &data)?;
         Ok(())
     }
 }
@@ -101,37 +85,50 @@ impl VaultRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::database::initialize;
-    use sqlx::sqlite::SqlitePoolOptions;
+    use crate::storage::database::Database;
 
     #[tokio::test]
     async fn repository_round_trip_persists_vaults() {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let database = Database::open_at(temp_dir.path().join(".mindgraph"))
             .await
-            .expect("create pool");
-        initialize(&pool).await.expect("init db");
+            .expect("open database");
 
-        let repository = VaultRepository::new(pool);
+        let repository = VaultRepository::new(database.root_dir().to_path_buf());
+        let vault_path = temp_dir.path().join("vaults").join("mindgraph");
         let created = repository
-            .create_vault("mindgraph".to_string(), "/vaults/mindgraph".to_string())
+            .create_vault(
+                "mindgraph".to_string(),
+                vault_path.to_string_lossy().into_owned(),
+            )
             .await
             .expect("create vault");
 
         assert_eq!(created.name, "mindgraph");
-        assert_eq!(created.root_path, "/vaults/mindgraph");
+        assert_eq!(created.root_path, vault_path.to_string_lossy());
 
         let updated = repository
             .update_vault(
                 created.id,
                 "mindgraph-personal".to_string(),
-                "/vaults/personal".to_string(),
+                temp_dir
+                    .path()
+                    .join("vaults")
+                    .join("personal")
+                    .to_string_lossy()
+                    .into_owned(),
             )
             .await
             .expect("update vault");
         assert_eq!(updated.name, "mindgraph-personal");
-        assert_eq!(updated.root_path, "/vaults/personal");
+        assert_eq!(
+            updated.root_path,
+            temp_dir
+                .path()
+                .join("vaults")
+                .join("personal")
+                .to_string_lossy()
+        );
 
         let vaults = repository.list_vaults().await.expect("list");
         assert!(

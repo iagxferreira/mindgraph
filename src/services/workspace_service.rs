@@ -1,12 +1,15 @@
 use async_trait::async_trait;
 use thiserror::Error;
 
-use crate::{app::Workspace, storage::workspace_repository::WorkspaceRepository};
+use crate::{
+    app::Workspace,
+    storage::{StorageError, workspace_repository::WorkspaceRepository},
+};
 
 #[derive(Debug, Error)]
 pub enum ServiceError {
     #[error(transparent)]
-    Storage(#[from] sqlx::Error),
+    Storage(#[from] StorageError),
 }
 
 #[async_trait]

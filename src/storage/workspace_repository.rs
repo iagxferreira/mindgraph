@@ -1,67 +1,49 @@
-use sqlx::{FromRow, SqlitePool};
+use std::path::PathBuf;
 
-use crate::app::{Workspace, current_unix_timestamp};
+use crate::{
+    app::Workspace,
+    storage::{
+        database::{load_config, load_data, save_data},
+        error::StorageError,
+    },
+};
 
 #[derive(Clone)]
 pub struct WorkspaceRepository {
-    pool: SqlitePool,
-}
-
-#[derive(Debug, FromRow)]
-struct WorkspaceRow {
-    id: i64,
-    name: String,
-    path: String,
-}
-
-impl From<WorkspaceRow> for Workspace {
-    fn from(row: WorkspaceRow) -> Self {
-        Self {
-            id: row.id,
-            name: row.name,
-            path: row.path,
-        }
-    }
+    root_dir: PathBuf,
 }
 
 impl WorkspaceRepository {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(root_dir: PathBuf) -> Self {
+        Self { root_dir }
     }
 
-    pub async fn list_workspaces(&self) -> Result<Vec<Workspace>, sqlx::Error> {
-        let rows = sqlx::query_as::<_, WorkspaceRow>(
-            r#"
-            SELECT id, name, path
-            FROM workspaces
-            ORDER BY id ASC
-            "#,
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows.into_iter().map(Workspace::from).collect())
+    pub async fn list_workspaces(&self) -> Result<Vec<Workspace>, StorageError> {
+        let mut workspaces = load_data(&self.root_dir)?.workspaces;
+        workspaces.sort_by(|left, right| left.id.cmp(&right.id));
+        Ok(workspaces)
     }
 
     pub async fn create_workspace(
         &self,
         name: String,
         path: String,
-    ) -> Result<Workspace, sqlx::Error> {
-        let row = sqlx::query_as::<_, WorkspaceRow>(
-            r#"
-            INSERT INTO workspaces (name, path, created_at_unix)
-            VALUES (?1, ?2, ?3)
-            RETURNING id, name, path
-            "#,
-        )
-        .bind(name)
-        .bind(path)
-        .bind(current_unix_timestamp())
-        .fetch_one(&self.pool)
-        .await?;
+    ) -> Result<Workspace, StorageError> {
+        let config = load_config(&self.root_dir)?;
+        let mut data = load_data(&self.root_dir)?;
+        std::fs::create_dir_all(&path)?;
+        if path.starts_with(&config.workspace_root) {
+            std::fs::create_dir_all(&config.workspace_root)?;
+        }
 
-        Ok(row.into())
+        let workspace = Workspace {
+            id: data.allocate_workspace_id(),
+            name,
+            path,
+        };
+        data.workspaces.push(workspace.clone());
+        save_data(&self.root_dir, &data)?;
+        Ok(workspace)
     }
 
     pub async fn update_workspace(
@@ -69,29 +51,37 @@ impl WorkspaceRepository {
         workspace_id: i64,
         name: String,
         path: String,
-    ) -> Result<Workspace, sqlx::Error> {
-        let row = sqlx::query_as::<_, WorkspaceRow>(
-            r#"
-            UPDATE workspaces
-            SET name = ?2, path = ?3
-            WHERE id = ?1
-            RETURNING id, name, path
-            "#,
-        )
-        .bind(workspace_id)
-        .bind(name)
-        .bind(path)
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(row.into())
+    ) -> Result<Workspace, StorageError> {
+        let mut data = load_data(&self.root_dir)?;
+        let workspace = data
+            .workspaces
+            .iter_mut()
+            .find(|current| current.id == workspace_id)
+            .ok_or(StorageError::NotFound {
+                entity: "workspace",
+                id: workspace_id,
+            })?;
+        std::fs::create_dir_all(&path)?;
+        workspace.name = name;
+        workspace.path = path;
+        let updated = workspace.clone();
+        save_data(&self.root_dir, &data)?;
+        Ok(updated)
     }
 
-    pub async fn delete_workspace(&self, workspace_id: i64) -> Result<(), sqlx::Error> {
-        sqlx::query("DELETE FROM workspaces WHERE id = ?1")
-            .bind(workspace_id)
-            .execute(&self.pool)
-            .await?;
+    pub async fn delete_workspace(&self, workspace_id: i64) -> Result<(), StorageError> {
+        let mut data = load_data(&self.root_dir)?;
+        let initial_len = data.workspaces.len();
+        data.workspaces.retain(|workspace| workspace.id != workspace_id);
+
+        if data.workspaces.len() == initial_len {
+            return Err(StorageError::NotFound {
+                entity: "workspace",
+                id: workspace_id,
+            });
+        }
+
+        save_data(&self.root_dir, &data)?;
         Ok(())
     }
 }
@@ -99,20 +89,16 @@ impl WorkspaceRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::database::initialize;
-    use sqlx::sqlite::SqlitePoolOptions;
+    use crate::storage::database::Database;
 
     #[tokio::test]
     async fn repository_round_trip_persists_workspaces() {
-        let url = "sqlite::memory:";
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect(url)
+        let temp_dir = tempfile::tempdir().expect("create temp dir");
+        let database = Database::open_at(temp_dir.path().join(".mindgraph"))
             .await
-            .expect("create pool");
-        initialize(&pool).await.expect("init db");
+            .expect("open database");
 
-        let repository = WorkspaceRepository::new(pool);
+        let repository = WorkspaceRepository::new(database.root_dir().to_path_buf());
         let created = repository
             .create_workspace("mindgraph".to_string(), "/tmp/mindgraph".to_string())
             .await

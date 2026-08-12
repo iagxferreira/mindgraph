@@ -1,70 +1,49 @@
-use sqlx::{FromRow, SqlitePool};
+use std::path::PathBuf;
 
-use crate::app::{Note, current_unix_timestamp};
+use crate::{
+    app::{Note, current_unix_timestamp},
+    storage::{
+        database::{load_data, save_data},
+        error::StorageError,
+    },
+};
 
 #[derive(Clone)]
 pub struct NoteRepository {
-    pool: SqlitePool,
-}
-
-#[derive(Debug, FromRow)]
-struct NoteRow {
-    id: i64,
-    vault_id: i64,
-    title: String,
-    slug: String,
-    content: String,
-    created_at_unix: i64,
-    updated_at_unix: i64,
-}
-
-impl From<NoteRow> for Note {
-    fn from(row: NoteRow) -> Self {
-        Self {
-            id: row.id,
-            vault_id: row.vault_id,
-            title: row.title,
-            slug: row.slug,
-            content: row.content,
-            created_at_unix: row.created_at_unix,
-            updated_at_unix: row.updated_at_unix,
-        }
-    }
+    root_dir: PathBuf,
 }
 
 impl NoteRepository {
-    pub fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub fn new(root_dir: PathBuf) -> Self {
+        Self { root_dir }
     }
 
-    pub async fn list_notes(&self) -> Result<Vec<Note>, sqlx::Error> {
-        let rows = sqlx::query_as::<_, NoteRow>(
-            r#"
-            SELECT id, vault_id, title, slug, content, created_at_unix, updated_at_unix
-            FROM notes
-            ORDER BY updated_at_unix DESC, created_at_unix DESC, id DESC
-            "#,
-        )
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows.into_iter().map(Note::from).collect())
+    pub async fn list_notes(&self) -> Result<Vec<Note>, StorageError> {
+        let mut notes = load_data(&self.root_dir)?.notes;
+        notes.sort_by(|left, right| {
+            right
+                .updated_at_unix
+                .cmp(&left.updated_at_unix)
+                .then_with(|| right.created_at_unix.cmp(&left.created_at_unix))
+                .then_with(|| right.id.cmp(&left.id))
+        });
+        Ok(notes)
     }
 
-    pub async fn list_notes_by_vault(&self, vault_id: i64) -> Result<Vec<Note>, sqlx::Error> {
-        let rows = sqlx::query_as::<_, NoteRow>(
-            r#"
-            SELECT id, vault_id, title, slug, content, created_at_unix, updated_at_unix
-            FROM notes
-            WHERE vault_id = ?1
-            ORDER BY updated_at_unix DESC, created_at_unix DESC, id DESC
-            "#,
-        )
-        .bind(vault_id)
-        .fetch_all(&self.pool)
-        .await?;
-
-        Ok(rows.into_iter().map(Note::from).collect())
+    pub async fn list_notes_by_vault(&self, vault_id: i64) -> Result<Vec<Note>, StorageError> {
+        let mut notes = load_data(&self.root_dir)?
+            .notes
+            .into_iter()
+            .filter(|note| note.vault_id == vault_id)
+            .collect::<Vec<_>>();
+        notes.sort_by(|left, right| {
+            right
+                .updated_at_unix
+                .cmp(&left.updated_at_unix)
+                .then_with(|| right.created_at_unix.cmp(&left.created_at_unix))
+                .then_with(|| right.id.cmp(&left.id))
+        });
+        Ok(notes)
     }
 
     pub async fn create_note(
@@ -73,31 +52,21 @@ impl NoteRepository {
         title: String,
         slug: String,
         content: String,
-    ) -> Result<Note, sqlx::Error> {
+    ) -> Result<Note, StorageError> {
         let now = current_unix_timestamp();
-        let row = sqlx::query_as::<_, NoteRow>(
-            r#"
-            INSERT INTO notes (
-                vault_id,
-                title,
-                slug,
-                content,
-                created_at_unix,
-                updated_at_unix
-            )
-            VALUES (?1, ?2, ?3, ?4, ?5, ?5)
-            RETURNING id, vault_id, title, slug, content, created_at_unix, updated_at_unix
-            "#,
-        )
-        .bind(vault_id)
-        .bind(title)
-        .bind(slug)
-        .bind(content)
-        .bind(now)
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(row.into())
+        let mut data = load_data(&self.root_dir)?;
+        let note = Note {
+            id: data.allocate_note_id(),
+            vault_id,
+            title,
+            slug,
+            content,
+            created_at_unix: now,
+            updated_at_unix: now,
+        };
+        data.notes.push(note.clone());
+        save_data(&self.root_dir, &data)?;
+        Ok(note)
     }
 
     pub async fn update_note(
@@ -106,34 +75,40 @@ impl NoteRepository {
         title: String,
         slug: String,
         content: String,
-    ) -> Result<Note, sqlx::Error> {
-        let row = sqlx::query_as::<_, NoteRow>(
-            r#"
-            UPDATE notes
-            SET title = ?2,
-                slug = ?3,
-                content = ?4,
-                updated_at_unix = ?5
-            WHERE id = ?1
-            RETURNING id, vault_id, title, slug, content, created_at_unix, updated_at_unix
-            "#,
-        )
-        .bind(note_id)
-        .bind(title)
-        .bind(slug)
-        .bind(content)
-        .bind(current_unix_timestamp())
-        .fetch_one(&self.pool)
-        .await?;
-
-        Ok(row.into())
+    ) -> Result<Note, StorageError> {
+        let mut data = load_data(&self.root_dir)?;
+        let note = data
+            .notes
+            .iter_mut()
+            .find(|current| current.id == note_id)
+            .ok_or(StorageError::NotFound {
+                entity: "note",
+                id: note_id,
+            })?;
+        note.title = title;
+        note.slug = slug;
+        note.content = content;
+        note.updated_at_unix = current_unix_timestamp();
+        let updated = note.clone();
+        save_data(&self.root_dir, &data)?;
+        Ok(updated)
     }
 
-    pub async fn delete_note(&self, note_id: i64) -> Result<(), sqlx::Error> {
-        sqlx::query("DELETE FROM notes WHERE id = ?1")
-            .bind(note_id)
-            .execute(&self.pool)
-            .await?;
+    pub async fn delete_note(&self, note_id: i64) -> Result<(), StorageError> {
+        let mut data = load_data(&self.root_dir)?;
+        let initial_len = data.notes.len();
+        data.notes.retain(|note| note.id != note_id);
+
+        if data.notes.len() == initial_len {
+            return Err(StorageError::NotFound {
+                entity: "note",
+                id: note_id,
+            });
+        }
+
+        data.links
+            .retain(|link| link.source_note_id != note_id && link.target_note_id != note_id);
+        save_data(&self.root_dir, &data)?;
         Ok(())
     }
 }
@@ -141,19 +116,16 @@ impl NoteRepository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::storage::database::initialize;
-    use sqlx::sqlite::SqlitePoolOptions;
+    use crate::storage::database::Database;
 
     #[tokio::test]
     async fn repository_round_trip_persists_notes() {
-        let pool = SqlitePoolOptions::new()
-            .max_connections(1)
-            .connect("sqlite::memory:")
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let database = Database::open_at(temp_dir.path().join(".mindgraph"))
             .await
-            .expect("create pool");
-        initialize(&pool).await.expect("init db");
+            .expect("init db");
 
-        let repository = NoteRepository::new(pool);
+        let repository = NoteRepository::new(database.root_dir().to_path_buf());
         let created = repository
             .create_note(
                 1,
