@@ -4,7 +4,7 @@ SHELL := /bin/sh
 
 help:
 	@printf '%s\n' \
-		'forge targets:' \
+		'mindgraph targets:' \
 		'  make run       - run the TUI application' \
 		'  make check     - type-check the project' \
 		'  make test      - run the test suite' \

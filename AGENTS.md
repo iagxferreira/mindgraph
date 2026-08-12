@@ -1,28 +1,28 @@
 # Repository Guidelines
 
-Agni is a Rust workspace for an in-memory cache server, client, and benchmark tools. Keep changes small, testable, and scoped to the owning crate.
+MindGraph is a Rust workspace for a pane-driven terminal workspace with tasks, workspaces, notifications, Pomodoro tracking, and SQLite-backed persistence. Keep changes small, testable, and scoped to the owning layer.
 
 ## Project Structure
 
-- `agni/` is the core library with store, protocol, and command logic.
-- `agni-server/` is the TCP server binary.
-- `agni-client/` is the CLI client binary.
-- `agni-bench/` is the benchmarking binary.
-- `README.md` stays high level. `BENCHMARK.md` records performance results.
+- `src/main.rs` wires the event loop, terminal setup, and services.
+- `src/app/` owns `AppState`, events, and reducer-style state changes.
+- `src/ui/` renders screens and widgets only.
+- `src/services/` contains async service traits and implementations.
+- `src/storage/` owns SQLite access and repositories.
+- `src/plugins/` defines the plugin trait surface.
+- `README.md` stays high level. `BENCHMARK.md` records benchmark notes and results.
 
-Prefer moving shared logic into `agni/` and keeping binaries thin.
+Prefer moving shared logic into the owning layer and keeping UI, service, and storage boundaries clear.
 
 ## Build And Test
 
-- `cargo test` runs the workspace tests.
-- `cargo fmt` formats the codebase.
-- `cargo clippy --all-targets --all-features` runs lint checks.
-- `cargo run -p agni-server -- --config config.example.yml` starts the server locally.
-- `cargo run -p agni-client -- PING` sends a command to a running server.
+- `make run` starts the TUI locally.
+- `make test` runs the test suite.
+- `make fmt` formats the codebase.
+- `make clippy` runs lint checks for all targets.
+- `make coverage` generates coverage reporting.
 
-Use release builds for benchmark work:
-
-- `cargo build --release -p agni-server -p agni-bench`
+Use `cargo test` when you need direct Cargo output. Prefer the `Makefile` targets for day-to-day work.
 
 ## Style And Boundaries
 
@@ -30,22 +30,24 @@ Use standard Rust formatting: 4-space indentation, `snake_case` for functions an
 
 Keep boundaries clear:
 
-- the server handles networking and I/O
-- the client handles CLI input and output
-- the core crate owns cache behavior and protocol types
+- the app layer handles events and state transitions
+- the UI layer renders state and user hints
+- the service layer mediates async work
+- the storage layer owns SQLx and persistence
 
 ## Testing
 
 Use `#[test]` for synchronous logic and `#[tokio::test]` for async code. Name tests by behavior, such as `set_overwrites_existing_value`.
 
-Focus coverage on protocol parsing, store behavior, command execution, and client/server integration points.
+Focus coverage on state transitions, repository behavior, service logic, and non-trivial widget rendering.
 
 ## Documentation
 
 - Update `README.md` when public usage changes.
 - Update `BENCHMARK.md` when benchmark methodology or results change.
+- Update `ROADMAP.md` when the product direction changes.
 - Update `AGENTS.md` when workflow or project conventions change.
 
 ## Commits
 
-Use concise imperative commit messages, for example `feat: add ttl command`. Group code, docs, and benchmark changes separately when possible.
+Use concise imperative commit messages, for example `feat: add task filter`. Group code, docs, and benchmark changes separately when possible.

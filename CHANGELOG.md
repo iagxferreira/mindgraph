@@ -1,17 +1,13 @@
 # Changelog
 
-All notable changes to Forge will be tracked in this file.
+All notable changes to MindGraph will be tracked in this file.
 
 ## [Unreleased]
 
 ### Added
 
-- Clean architecture layout with `app/`, `ui/`, `services/`, `storage/`, and `plugins/`.
-- Ratatui event loop with keyboard navigation and command hints.
-- Dashboard, tasks, notifications, and workspaces screens.
-- Persistent task storage backed by SQLite.
-- Workspace CRUD with SQLite persistence and UI wiring.
-- Pomodoro timer state and dashboard display.
-- `Makefile` targets for common development commands.
-- Repository docs for contribution workflow and project roadmap.
-
+- Pane-driven terminal shell with dashboard, tasks, notifications, and workspaces screens.
+- SQLite-backed task and workspace persistence with reducer-driven state updates.
+- Launcher overlay, theme switching, and Pomodoro timer support.
+- Storage repositories for vaults, notes, and links.
+- Contributor docs for workflow, roadmap, and benchmark notes.
