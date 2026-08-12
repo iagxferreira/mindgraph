@@ -123,6 +123,12 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
         Screen::Dashboard => {
             hints.extend([
                 Span::raw("  •  "),
+                Span::styled("p", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(if app.pomodoro.running { ": pause pomodoro" } else { ": start pomodoro" }),
+                Span::raw("  •  "),
+                Span::styled("r", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": reset pomodoro"),
+                Span::raw("  •  "),
                 Span::styled("t", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(": theme"),
             ]);
