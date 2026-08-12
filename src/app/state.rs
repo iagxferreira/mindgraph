@@ -2232,6 +2232,31 @@ impl AppState {
         let mut entries = match screen {
             Screen::Dashboard => vec![
                 LauncherEntry {
+                    label: "add task".to_string(),
+                    hint: "open the task editor".to_string(),
+                    target: LauncherTarget::OpenTaskInput,
+                },
+                LauncherEntry {
+                    label: "create/select work item".to_string(),
+                    hint: "bind the selected task and note".to_string(),
+                    target: LauncherTarget::SelectOrCreateRunWorkItem,
+                },
+                LauncherEntry {
+                    label: "start work item".to_string(),
+                    hint: "start the selected work item".to_string(),
+                    target: LauncherTarget::StartRunWorkItem,
+                },
+                LauncherEntry {
+                    label: "pause work item".to_string(),
+                    hint: "pause the selected work item".to_string(),
+                    target: LauncherTarget::PauseRunWorkItem,
+                },
+                LauncherEntry {
+                    label: "stop work item".to_string(),
+                    hint: "save elapsed time".to_string(),
+                    target: LauncherTarget::StopRunWorkItem,
+                },
+                LauncherEntry {
                     label: if self.pomodoro.running {
                         "pause pomodoro".to_string()
                     } else {
@@ -2754,6 +2779,127 @@ mod tests {
         )));
 
         assert_eq!(state.active_screen, Screen::Run);
+    }
+
+    #[test]
+    fn dashboard_launcher_add_task_opens_task_input() {
+        let mut state = AppState::new();
+        state.active_screen = Screen::Dashboard;
+
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Char(':'),
+            KeyModifiers::NONE,
+        )));
+
+        let actions = state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+        )));
+
+        assert!(matches!(actions.as_slice(), [AppAction::None]));
+        assert!(matches!(
+            state.task_input_mode,
+            Some(TaskInputMode::Creating)
+        ));
+    }
+
+    #[test]
+    fn dashboard_launcher_create_select_work_item_creates_action() {
+        let mut state = AppState::new();
+        state.active_screen = Screen::Dashboard;
+        state.tasks = vec![Task {
+            id: 1,
+            title: "task one".to_string(),
+            description: String::new(),
+            doing: false,
+            completed: false,
+            tracked_seconds: 0,
+            created_at_unix: 0,
+        }];
+        state.notes = vec![Note {
+            id: 10,
+            vault_id: 1,
+            title: "note one".to_string(),
+            slug: "note-one".to_string(),
+            path: "note-one.md".to_string(),
+            created_at_unix: 0,
+            updated_at_unix: 0,
+        }];
+        state.selected_task = Some(0);
+        state.mind_selection = Some(MindSelection::Note { note_id: 10 });
+
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Char(':'),
+            KeyModifiers::NONE,
+        )));
+        if let Some(launcher) = state.launcher.as_mut() {
+            launcher.selected = 1;
+        }
+
+        let actions = state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+        )));
+
+        assert!(
+            matches!(actions.as_slice(), [AppAction::CreateWorkItem { task_id, note_id }] if *task_id == 1 && *note_id == 10)
+        );
+    }
+
+    #[test]
+    fn dashboard_launcher_start_work_item_starts_pomodoro() {
+        let mut state = AppState::new();
+        state.active_screen = Screen::Dashboard;
+        state.tasks = vec![Task {
+            id: 1,
+            title: "task one".to_string(),
+            description: String::new(),
+            doing: false,
+            completed: false,
+            tracked_seconds: 0,
+            created_at_unix: 0,
+        }];
+        state.notes = vec![Note {
+            id: 10,
+            vault_id: 1,
+            title: "note one".to_string(),
+            slug: "note-one".to_string(),
+            path: "note-one.md".to_string(),
+            created_at_unix: 0,
+            updated_at_unix: 0,
+        }];
+        state.work_items = vec![WorkItem {
+            id: 100,
+            task_id: 1,
+            note_id: 10,
+            run_state: RunState::Idle,
+            pomodoro_session_ids: Vec::new(),
+            started_at_unix: None,
+            stopped_at_unix: None,
+            elapsed_seconds: 0,
+            created_at_unix: 0,
+            updated_at_unix: 0,
+        }];
+        state.selected_work_item = Some(0);
+
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Char(':'),
+            KeyModifiers::NONE,
+        )));
+        if let Some(launcher) = state.launcher.as_mut() {
+            launcher.selected = 2;
+        }
+
+        let actions = state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+        )));
+
+        assert!(state.pomodoro.running);
+        assert_eq!(state.pomodoro.task_id, Some(1));
+        assert!(
+            matches!(actions.as_slice(), [AppAction::SetTaskDoing { task_id, doing }, AppAction::UpdateWorkItem { work_item_id, .. }] if *task_id == 1 && *doing && *work_item_id == 100)
+        );
     }
 
     #[test]

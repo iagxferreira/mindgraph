@@ -150,6 +150,15 @@ fn footer_hints(app: &AppState) -> Vec<Span<'static>> {
 
     if let Some(launcher) = app.launcher.as_ref() {
         match launcher.screen {
+            Screen::Dashboard => {
+                hints.push(Span::raw("  •  "));
+                hints.push(Span::styled("a", accent_style()));
+                hints.push(Span::raw(" add task  "));
+                hints.push(Span::styled("w", accent_style()));
+                hints.push(Span::raw(" work item  "));
+                hints.push(Span::styled("r/p/s", accent_style()));
+                hints.push(Span::raw(" start/pause/stop"));
+            }
             Screen::Pomodoro => {
                 hints.push(Span::raw("  •  "));
                 hints.push(Span::styled("p", accent_style()));
