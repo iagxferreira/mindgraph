@@ -1,49 +1,51 @@
 # Repository Guidelines
 
-Forge is a terminal-native productivity environment for software engineers. Keep changes small, testable, and local to the owning layer.
+Agni is a Rust workspace for an in-memory cache server, client, and benchmark tools. Keep changes small, testable, and scoped to the owning crate.
 
 ## Project Structure
 
-- `src/main.rs` wires the Ratatui event loop and async services.
-- `src/app/` owns `AppState`, events, and reducer-style state changes.
-- `src/ui/` renders screens and widgets only.
-- `src/services/` contains async service traits and implementations.
-- `src/storage/` owns SQLite access and persistence.
-- `src/plugins/` is reserved for future plugin hooks.
-- `README.md` stays high-level; `HOW_TO_CONTRIBUTE.md` holds workflow details; `ROADMAP.md` tracks next work; `CHANGELOG.md` records shipped changes.
+- `agni/` is the core library with store, protocol, and command logic.
+- `agni-server/` is the TCP server binary.
+- `agni-client/` is the CLI client binary.
+- `agni-bench/` is the benchmarking binary.
+- `README.md` stays high level. `BENCHMARK.md` records performance results.
+
+Prefer moving shared logic into `agni/` and keeping binaries thin.
 
 ## Build And Test
 
-- `make run` starts Forge.
-- `make test` runs the test suite.
-- `make fmt` formats the codebase.
-- `make clippy` runs lint checks.
-- `make coverage` generates coverage reporting.
+- `cargo test` runs the workspace tests.
+- `cargo fmt` formats the codebase.
+- `cargo clippy --all-targets --all-features` runs lint checks.
+- `cargo run -p agni-server -- --config config.example.yml` starts the server locally.
+- `cargo run -p agni-client -- PING` sends a command to a running server.
 
-Use `cargo test` only when direct Cargo output is needed.
+Use release builds for benchmark work:
+
+- `cargo build --release -p agni-server -p agni-bench`
 
 ## Style And Boundaries
 
-Use standard Rust formatting: 4-space indentation, `snake_case` for functions and modules, `PascalCase` for types, and `UPPER_SNAKE_CASE` for constants. Keep UI labels lowercase to match the terminal style.
+Use standard Rust formatting: 4-space indentation, `snake_case` for functions and modules, `PascalCase` for types, and `UPPER_SNAKE_CASE` for constants. Prefer explicit, testable functions over shared mutable state.
 
-Preserve the architecture boundary:
-- UI code should not talk to SQLx directly.
-- Storage code should not depend on Ratatui.
-- `AppState` should remain the single source of truth for UI state.
+Keep boundaries clear:
+
+- the server handles networking and I/O
+- the client handles CLI input and output
+- the core crate owns cache behavior and protocol types
 
 ## Testing
 
-Use `#[test]` for synchronous logic and `#[tokio::test]` for async repository or service tests. Name tests by behavior, such as `repository_round_trip_persists_workspaces`.
+Use `#[test]` for synchronous logic and `#[tokio::test]` for async code. Name tests by behavior, such as `set_overwrites_existing_value`.
 
-Focus tests on reducer behavior, SQLite persistence, and non-trivial screen logic. Keep widget rendering thin so behavior remains testable outside Ratatui.
+Focus coverage on protocol parsing, store behavior, command execution, and client/server integration points.
 
-## Workflow
+## Documentation
 
-- Screen navigation uses `Ctrl+L` and `Ctrl+H`.
-- Task actions use `a`, `e` or `Enter`, `d`, `space`, and `t`.
-- Workspace actions follow the same pattern on the Workspaces screen.
-- SQLite uses `FORGE_DB_PATH` when set; otherwise Forge writes to a temp directory.
+- Update `README.md` when public usage changes.
+- Update `BENCHMARK.md` when benchmark methodology or results change.
+- Update `AGENTS.md` when workflow or project conventions change.
 
 ## Commits
 
-Use concise imperative commits, for example `feat: wire workspace state and ui`. Group code, docs, and tooling changes separately when possible.
+Use concise imperative commit messages, for example `feat: add ttl command`. Group code, docs, and benchmark changes separately when possible.

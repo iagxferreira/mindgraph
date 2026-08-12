@@ -1,29 +1,53 @@
-# Forge
+# agni
 
-Forge is a terminal-native productivity environment for software engineers, built in Rust with Ratatui, Crossterm, Tokio, and SQLite via SQLx.
+Agni is a Redis-like in-memory cache server written in Rust.
 
-## Preview
+## Workspace
 
-![Forge dashboard screenshot](assets/screenshots/forge-dashboard.png)
+- `agni/` core library for store, protocol, and command logic
+- `agni-server/` TCP server binary
+- `agni-client/` CLI client binary
+- `agni-bench/` benchmark binary
 
-## Features
-
-- Dashboard, tasks, notifications, and workspaces screens
-- Keyboard navigation for fast terminal use
-- Persistent tasks stored in SQLite
-- Theme switching
-- Clean architecture with separate app, UI, services, storage, and plugins layers
-
-## Quick Start
+## Getting Started
 
 ```bash
-cargo run
+cargo run -p agni-server -- --config config.example.yml
+cargo run -p agni-client -- PING
 ```
 
-By default, Forge stores its SQLite database in a temp directory. Set `FORGE_DB_PATH` to use a custom file:
+## Docker
 
 ```bash
-FORGE_DB_PATH=./forge.db cargo run
+docker build -t agni .
+docker run -p 6379:6379 agni
 ```
 
-See [HOW_TO_CONTRIBUTE.md](HOW_TO_CONTRIBUTE.md) for development commands, key bindings, testing, and repository conventions.
+For custom config, mount a file at `/etc/agni/config.yml`. Inside the container, `host` must be `0.0.0.0`.
+
+## Documentation
+
+- [AGENTS.md](AGENTS.md) contributor guide and repo conventions
+- [BENCHMARK.md](BENCHMARK.md) performance methodology and results
+
+## Library Use
+
+```toml
+[dependencies]
+agni = "0.1"
+```
+
+```rust
+use agni::store::Store;
+
+let store = Store::new();
+store.set("key".to_string(), b"value".to_vec());
+```
+
+## Roadmap
+
+- [x] Core commands: `PING`, `GET`, `SET`
+- [ ] Remaining commands: `DEL`, `EXISTS`, `EXPIRE`, `TTL`
+- [ ] TTL and background expiry cleanup
+- [ ] Persistence
+- [ ] Additional data types: lists, hashes, sets
