@@ -1,6 +1,9 @@
-use std::{env, path::PathBuf};
+use std::{env, fs, path::PathBuf};
 
-use sqlx::{sqlite::SqlitePoolOptions, SqlitePool};
+use sqlx::{
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
+    SqlitePool,
+};
 
 use crate::storage::task_repository::TaskRepository;
 
@@ -12,10 +15,18 @@ pub struct Database {
 impl Database {
     pub async fn open_default() -> Result<Self, sqlx::Error> {
         let path = default_database_path();
-        let url = format!("sqlite://{}", path.to_string_lossy());
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(sqlx::Error::Io)?;
+        }
+
+        let options = SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true)
+            .journal_mode(SqliteJournalMode::Wal);
+
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
-            .connect(&url)
+            .connect_with(options)
             .await?;
         initialize(&pool).await?;
         Ok(Self { pool })
