@@ -20,6 +20,9 @@ cargo run
 
 The first launch creates `~/.config/mindgraph/` with `config.json` and `data.json`.
 
+- `config.json` stores app-level configuration.
+- `data.json` stores tasks, workspaces, vaults, notes, and links.
+
 To change the storage location, set `MINDGRAPH_HOME` to a different directory.
 
 ## Useful Commands

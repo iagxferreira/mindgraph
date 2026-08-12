@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-MindGraph is a Rust workspace for a pane-driven terminal workspace with tasks, workspaces, notifications, Pomodoro tracking, and SQLite-backed persistence. Keep changes small, testable, and scoped to the owning layer.
+MindGraph is a Rust workspace for a pane-driven terminal workspace with tasks, workspaces, notifications, Pomodoro tracking, and file-backed persistence. Keep changes small, testable, and scoped to the owning layer.
 
 ## Project Structure
 
@@ -8,7 +8,7 @@ MindGraph is a Rust workspace for a pane-driven terminal workspace with tasks, w
 - `src/app/` owns `AppState`, events, and reducer-style state changes.
 - `src/ui/` renders screens and widgets only.
 - `src/services/` contains async service traits and implementations.
-- `src/storage/` owns SQLite access and repositories.
+- `src/storage/` owns file-backed persistence and repositories.
 - `src/plugins/` defines the plugin trait surface.
 - `README.md` stays high level. `BENCHMARK.md` records benchmark notes and results.
 
@@ -33,7 +33,7 @@ Keep boundaries clear:
 - the app layer handles events and state transitions
 - the UI layer renders state and user hints
 - the service layer mediates async work
-- the storage layer owns SQLx and persistence
+- the storage layer owns file-backed persistence and repositories
 
 ## Testing
 
