@@ -2,6 +2,12 @@
 
 This file tracks the next planned work for Forge. Keep items small and shippable.
 
+## Done
+
+- Dashboard, tasks, and workspace screens are wired into the TUI.
+- Task and workspace state is persisted through SQLite.
+- Keyboard navigation and command hints are in place.
+
 ## Now
 
 - Finish the dashboard polish for the pomodoro panel.
@@ -10,8 +16,8 @@ This file tracks the next planned work for Forge. Keep items small and shippable
 ## Next
 
 - Implement a real notifications screen.
-- Add a workspace management screen with create, rename, and delete flows.
 - Persist workspace-specific configuration.
+- Refine workspace screen empty states and details formatting.
 
 ## Later
 

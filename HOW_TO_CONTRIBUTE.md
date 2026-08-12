@@ -1,7 +1,5 @@
 # Repository Guidelines
 
-Forge is a terminal-native productivity environment for software engineers. Keep changes small, testable, and local to the owning layer.
-
 ## Project Structure
 
 - `src/main.rs` wires the Ratatui event loop and async services.
@@ -9,33 +7,31 @@ Forge is a terminal-native productivity environment for software engineers. Keep
 - `src/ui/` renders screens and widgets only.
 - `src/services/` contains async service traits and implementations.
 - `src/storage/` owns SQLite access and persistence.
-- `src/plugins/` is reserved for future plugin hooks.
-- `README.md` stays high-level; `HOW_TO_CONTRIBUTE.md` holds workflow details; `ROADMAP.md` tracks next work; `CHANGELOG.md` records shipped changes.
+- `src/plugins/` is reserved for future plugin traits and loading hooks.
 
-## Build And Test
+Keep changes small and local to the owning layer. UI code should not talk to SQLx directly, and storage code should not depend on Ratatui.
+
+## Build and Test
 
 - `make run` starts Forge.
 - `make test` runs the test suite.
 - `make fmt` formats the codebase.
-- `make clippy` runs lint checks.
+- `make clippy` runs lint checks for all targets.
 - `make coverage` generates coverage reporting.
 
-Use `cargo test` only when direct Cargo output is needed.
+Use `cargo test` only when you need direct Cargo output. Prefer the `Makefile` targets for day-to-day work.
 
-## Style And Boundaries
+## Style and Naming
 
-Use standard Rust formatting: 4-space indentation, `snake_case` for functions and modules, `PascalCase` for types, and `UPPER_SNAKE_CASE` for constants. Keep UI labels lowercase to match the terminal style.
+Use standard Rust formatting: 4-space indentation, `snake_case` for functions and modules, `PascalCase` for types, and `UPPER_SNAKE_CASE` for constants. Keep UI text lowercase to match the current terminal style.
 
-Preserve the architecture boundary:
-- UI code should not talk to SQLx directly.
-- Storage code should not depend on Ratatui.
-- `AppState` should remain the single source of truth for UI state.
+Favor explicit state transitions through `AppState::apply` and small helper functions. Avoid adding global mutable state.
 
 ## Testing
 
 Use `#[test]` for synchronous logic and `#[tokio::test]` for async repository or service tests. Name tests by behavior, such as `repository_round_trip_persists_workspaces`.
 
-Focus tests on reducer behavior, SQLite persistence, and non-trivial screen logic. Keep widget rendering thin so behavior remains testable outside Ratatui.
+Cover reducer behavior, SQLite persistence, and non-trivial widget logic. Keep UI rendering thin; most behavior should remain testable outside Ratatui.
 
 ## Workflow
 
@@ -44,6 +40,6 @@ Focus tests on reducer behavior, SQLite persistence, and non-trivial screen logi
 - Workspace actions follow the same pattern on the Workspaces screen.
 - SQLite uses `FORGE_DB_PATH` when set; otherwise Forge writes to a temp directory.
 
-## Commits
+## Commit Notes
 
 Use concise imperative commits, for example `feat: wire workspace state and ui`. Group code, docs, and tooling changes separately when possible.
