@@ -271,6 +271,13 @@ pub struct LauncherState {
     pub selected: usize,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LauncherJumpTarget {
+    WorkItem(i64),
+    Task(i64),
+    PomodoroSession(i64),
+}
+
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub active_screen: Screen,
@@ -748,6 +755,21 @@ impl AppState {
                 vec![AppAction::None]
             }
             KeyCode::Enter => {
+                if let Some(jump_target) = self.parse_launcher_jump_target(&current_launcher.query)
+                {
+                    self.close_launcher();
+                    self.status_line = match jump_target {
+                        LauncherJumpTarget::WorkItem(work_item_id) => {
+                            self.jump_to_work_item(work_item_id)
+                        }
+                        LauncherJumpTarget::Task(task_id) => self.jump_to_task(task_id),
+                        LauncherJumpTarget::PomodoroSession(session_id) => {
+                            self.jump_to_pomodoro_session(session_id)
+                        }
+                    };
+                    return vec![AppAction::None];
+                }
+
                 let entries = self.filtered_launcher_entries();
                 let action = entries
                     .get(current_launcher.selected)
@@ -865,6 +887,39 @@ impl AppState {
                 vec![AppAction::None]
             }
             _ => vec![AppAction::None],
+        }
+    }
+
+    fn parse_launcher_jump_target(&self, query: &str) -> Option<LauncherJumpTarget> {
+        let normalized = query.trim().to_lowercase();
+        let stripped = normalized.strip_prefix("goto ").unwrap_or(&normalized);
+        let mut parts = stripped.split_whitespace();
+        let first = parts.next()?;
+
+        match first {
+            "wi" | "workitem" => parts
+                .next()
+                .and_then(|value| value.parse::<i64>().ok())
+                .map(LauncherJumpTarget::WorkItem),
+            "work" => match (parts.next(), parts.next()) {
+                (Some("item"), Some(value)) => {
+                    value.parse::<i64>().ok().map(LauncherJumpTarget::WorkItem)
+                }
+                _ => None,
+            },
+            "task" => parts
+                .next()
+                .and_then(|value| value.parse::<i64>().ok())
+                .map(LauncherJumpTarget::Task),
+            "pomodoro" | "session" | "pomodorosession" => parts
+                .next()
+                .and_then(|value| value.parse::<i64>().ok())
+                .map(LauncherJumpTarget::PomodoroSession),
+            "pomodoro-session" => parts
+                .next()
+                .and_then(|value| value.parse::<i64>().ok())
+                .map(LauncherJumpTarget::PomodoroSession),
+            _ => None,
         }
     }
 
@@ -1177,6 +1232,44 @@ impl AppState {
                     .min(self.pomodoro_sessions.len() - 1),
             );
         }
+    }
+
+    fn jump_to_work_item(&mut self, work_item_id: i64) -> String {
+        if let Some(index) = self
+            .work_items
+            .iter()
+            .position(|item| item.id == work_item_id)
+        {
+            self.selected_work_item = Some(index);
+            self.active_screen = Screen::Dashboard;
+            return format!("opened work item #{work_item_id}");
+        }
+
+        format!("work item #{work_item_id} not found")
+    }
+
+    fn jump_to_task(&mut self, task_id: i64) -> String {
+        if let Some(index) = self.tasks.iter().position(|task| task.id == task_id) {
+            self.selected_task = Some(index);
+            self.active_screen = Screen::Tasks;
+            return format!("opened task #{task_id}");
+        }
+
+        format!("task #{task_id} not found")
+    }
+
+    fn jump_to_pomodoro_session(&mut self, session_id: i64) -> String {
+        if let Some(index) = self
+            .pomodoro_sessions
+            .iter()
+            .position(|session| session.id == session_id)
+        {
+            self.selected_pomodoro_session = Some(index);
+            self.active_screen = Screen::Pomodoro;
+            return format!("opened pomodoro session #{session_id}");
+        }
+
+        format!("pomodoro session #{session_id} not found")
     }
 
     fn sync_work_item_selection(&mut self) {

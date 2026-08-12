@@ -143,7 +143,9 @@ fn footer_hints(app: &AppState) -> Vec<Span<'static>> {
         Span::styled("j/k", accent_style()),
         Span::raw(" move  "),
         Span::styled("backspace", accent_style()),
-        Span::raw(" edit"),
+        Span::raw(" edit  "),
+        Span::styled("goto", accent_style()),
+        Span::raw(" wi 3 / task 8 / session 2"),
     ];
 
     if let Some(launcher) = app.launcher.as_ref() {
