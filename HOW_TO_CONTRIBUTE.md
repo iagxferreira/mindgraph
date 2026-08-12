@@ -18,11 +18,12 @@ If you need direct Cargo output, use `cargo test` or `cargo run`.
 
 ## Data Location
 
-MindGraph creates `~/.config/mindgraph/` on first launch.
+MindGraph stores data in `~/.config/mindgraph/` by default.
 
 - `config.json` stores app-level configuration.
-- `data.json` stores tasks, workspaces, vaults, notes, and links.
+- `data.json` stores tasks, workspaces, vaults, notes, links, pomodoro sessions, and work items.
 - Set `MINDGRAPH_HOME` to use a different storage directory.
+- If `HOME` is unavailable, the fallback root is `./.mindgraph/`.
 
 ## Style
 
@@ -43,3 +44,4 @@ Focus coverage on reducer behavior, file-backed persistence, service logic, and 
 
 - Use concise imperative commit messages, for example `feat: add workspace selector`.
 - Keep code, docs, and benchmark changes separate when practical.
+- Commit docs updates when product naming, workflow, or screen behavior changes.

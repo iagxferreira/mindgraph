@@ -1,6 +1,6 @@
 # Repository Guidelines
 
-MindGraph is a Rust workspace for a pane-driven terminal workspace with tasks, workspaces, notifications, Pomodoro tracking, and file-backed persistence. Keep changes small, testable, and scoped to the owning layer.
+MindGraph is a Rust workspace for a pane-driven terminal workspace with tasks, markdown notes, work items, workspaces, Pomodoro tracking, and file-backed persistence. Keep changes small, testable, and scoped to the owning layer.
 
 ## Project Structure
 
@@ -11,6 +11,7 @@ MindGraph is a Rust workspace for a pane-driven terminal workspace with tasks, w
 - `src/storage/` owns file-backed persistence and repositories.
 - `src/plugins/` defines the plugin trait surface.
 - `README.md` stays high level. `BENCHMARK.md` records benchmark notes and results.
+- `ROADMAP.md` tracks product direction and unfinished work.
 
 Prefer moving shared logic into the owning layer and keeping UI, service, and storage boundaries clear.
 

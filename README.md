@@ -1,14 +1,16 @@
 # MindGraph
 
-MindGraph is a pane-driven terminal workspace for tasks, workspaces, and lightweight knowledge management.
+MindGraph is a pane-driven terminal workspace for tasks, markdown notes, work items, Pomodoro tracking, and workspaces.
 
 It is built with Ratatui and keeps the main application flow in `src/app/`, `src/ui/`, `src/services/`, and `src/storage/`.
 
 ## What You Get
 
-- Dashboard, tasks, notifications, and workspaces screens
-- File-backed persistence for tasks, workspaces, vaults, notes, and links
-- Launcher overlay for quick navigation and actions
+- Dashboard, tasks, mind, run, pomodoro, notifications, and workspaces screens
+- File-backed persistence for tasks, workspaces, vaults, notes, links, pomodoro sessions, and work items
+- Launcher overlay for screen-scoped actions
+- Markdown note editing and filesystem-backed note paths
+- Work items that link a task to a note and track run state
 - Theme toggle and Pomodoro timer
 - Plugin trait surface for future extensions
 
@@ -18,12 +20,14 @@ It is built with Ratatui and keeps the main application flow in `src/app/`, `src
 cargo run
 ```
 
-The first launch creates `~/.config/mindgraph/` with `config.json` and `data.json`.
+By default MindGraph stores data in `~/.config/mindgraph/`.
 
 - `config.json` stores app-level configuration.
-- `data.json` stores tasks, workspaces, vaults, notes, and links.
+- `data.json` stores tasks, workspaces, vaults, notes, links, pomodoro sessions, and work items.
+- `workspaces/` is the default workspace root under the storage directory.
 
 To change the storage location, set `MINDGRAPH_HOME` to a different directory.
+If `HOME` is unavailable, MindGraph falls back to `./.mindgraph/`.
 
 ## Useful Commands
 
@@ -52,5 +56,5 @@ make coverage
 
 ## Current Focus
 
-The current product is a TUI shell for tasks, workspaces, notifications, and Pomodoro tracking.
-The storage layer already has vault, note, and link repositories, but those workflows are not yet exposed in the UI.
+The current product is a TUI shell for tasks, markdown notes, linked work items, workspaces, and Pomodoro tracking.
+The note workflow is file-backed, the run workflow links a task to a note, and the next polish work is around making those links easier to create and inspect.
