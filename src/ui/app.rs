@@ -32,7 +32,7 @@ pub fn draw(frame: &mut Frame<'_>, app: &AppState) {
 }
 
 fn draw_header(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
-    let titles = ["Dashboard", "Tasks", "Notifications", "Workspaces"]
+    let titles = ["dashboard", "tasks", "notifications", "workspaces"]
         .into_iter()
         .map(Line::from)
         .collect::<Vec<_>>();
@@ -47,7 +47,7 @@ fn draw_header(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
         .block(
             Block::default()
                 .borders(Borders::BOTTOM)
-                .title(Title::from("Forge")),
+                .title(Title::from("forge")),
         )
         .highlight_style(active_style(app.theme))
         .divider(symbols::DOT)
@@ -57,13 +57,13 @@ fn draw_header(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
 }
 
 fn draw_command_bar(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
-    let commands = command_hints(app.active_screen);
+    let commands = command_hints(app);
     let bar = Paragraph::new(Line::from(commands))
         .block(
             Block::default()
                 .borders(Borders::TOP)
                 .title(Line::from(vec![
-                    Span::styled("Status: ", Style::default().add_modifier(Modifier::BOLD)),
+                    Span::styled("status: ", Style::default().add_modifier(Modifier::BOLD)),
                     Span::raw(app.status_line.clone()),
                 ])),
         )
@@ -72,16 +72,32 @@ fn draw_command_bar(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
     frame.render_widget(bar, area);
 }
 
-fn command_hints(screen: Screen) -> Vec<Span<'static>> {
+fn command_hints(app: &AppState) -> Vec<Span<'static>> {
     let mut hints = vec![
-        Span::styled("Tab", Style::default().add_modifier(Modifier::BOLD)),
+        Span::styled("ctrl+l", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(": switch screen"),
+        Span::raw("  •  "),
+        Span::styled("ctrl+h", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(": previous screen"),
         Span::raw("  •  "),
         Span::styled("q", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(": quit"),
     ];
 
-    match screen {
+    match app.active_screen {
+        Screen::Tasks if app.task_input_mode.is_some() => {
+            hints.extend([
+                Span::raw("  •  "),
+                Span::styled("enter", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": next field/save"),
+                Span::raw("  •  "),
+                Span::styled("tab", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": switch field"),
+                Span::raw("  •  "),
+                Span::styled("esc", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": cancel"),
+            ]);
+        }
         Screen::Tasks => {
             hints.extend([
                 Span::raw("  •  "),
@@ -91,7 +107,7 @@ fn command_hints(screen: Screen) -> Vec<Span<'static>> {
                 Span::styled("a", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(": add"),
                 Span::raw("  •  "),
-                Span::styled("e/Enter", Style::default().add_modifier(Modifier::BOLD)),
+                Span::styled("e/enter", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(": edit"),
                 Span::raw("  •  "),
                 Span::styled("space", Style::default().add_modifier(Modifier::BOLD)),
@@ -102,9 +118,6 @@ fn command_hints(screen: Screen) -> Vec<Span<'static>> {
                 Span::raw("  •  "),
                 Span::styled("t", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(": theme"),
-                Span::raw("  •  "),
-                Span::styled("Esc", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(": cancel input"),
             ]);
         }
         Screen::Dashboard => {
