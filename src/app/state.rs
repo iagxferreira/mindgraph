@@ -163,7 +163,16 @@ pub enum WorkspaceInputField {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LauncherTarget {
-    Screen(Screen),
+    OpenTaskInput,
+    EditTask,
+    ToggleTask,
+    DeleteTask,
+    OpenMindDraft,
+    EditMindDraft,
+    DeleteMindDraft,
+    OpenWorkspaceInput,
+    EditWorkspace,
+    DeleteWorkspace,
     ToggleTheme,
     TogglePomodoro,
     ResetPomodoro,
@@ -179,6 +188,7 @@ pub struct LauncherEntry {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LauncherState {
+    pub screen: Screen,
     pub query: String,
     pub selected: usize,
 }
@@ -480,46 +490,13 @@ impl AppState {
                 .selected_task_id()
                 .map(|task_id| vec![AppAction::ToggleTask { task_id }])
                 .unwrap_or_else(|| vec![AppAction::None]),
-            KeyCode::Char('a') if self.active_screen == Screen::Mind => {
-                if let Some(vault_id) = self.selected_mind_vault_id() {
-                    let vault_root = self
-                        .selected_mind_vault_root_path()
-                        .unwrap_or_else(|| ".".to_string());
-                    self.mind_path_selection = Some(vault_root.clone());
-                    self.mind_path_expanded.insert(vault_root.clone());
-                    self.begin_mind_draft(
-                        MindDraftMode::Creating { vault_id },
-                        "# Untitled\n\n".to_string(),
-                    );
-                } else {
-                    self.status_line = "select a vault first".to_string();
-                }
-                vec![AppAction::None]
-            }
+            KeyCode::Char('a') if self.active_screen == Screen::Mind => self.begin_mind_note(),
             KeyCode::Char('e') | KeyCode::Enter if self.active_screen == Screen::Mind => {
-                match self.selected_mind_entry() {
-                    Some(MindTreeEntry::Vault { vault_id }) => self.toggle_mind_vault(vault_id),
-                    Some(MindTreeEntry::Note { note_id, .. }) => {
-                        if let Some(note) = self.notes.iter().find(|note| note.id == note_id) {
-                            self.begin_mind_draft(
-                                MindDraftMode::Editing { note_id },
-                                self.mind_document
-                                    .clone()
-                                    .unwrap_or_else(|| markdown_note_document_from(note)),
-                            );
-                        }
-                    }
-                    None => {}
-                }
-                self.sync_mind_document_action()
+                self.open_selected_mind_item()
             }
-            KeyCode::Char('d') if self.active_screen == Screen::Mind => self
-                .selected_mind_note_id()
-                .map(|note_id| vec![AppAction::DeleteNote { note_id }])
-                .unwrap_or_else(|| {
-                    self.status_line = "select a note to delete".to_string();
-                    vec![AppAction::None]
-                }),
+            KeyCode::Char('d') if self.active_screen == Screen::Mind => {
+                self.delete_selected_mind_note()
+            }
             KeyCode::Left | KeyCode::Char('h') if self.active_screen == Screen::Mind => {
                 self.collapse_mind_selection();
                 vec![AppAction::None]
@@ -528,25 +505,13 @@ impl AppState {
                 self.expand_mind_selection();
                 vec![AppAction::None]
             }
-            KeyCode::Char('a') if self.active_screen == Screen::Tasks => {
-                self.begin_task_input(TaskInputMode::Creating, String::new(), String::new());
-                vec![AppAction::None]
-            }
+            KeyCode::Char('a') if self.active_screen == Screen::Tasks => self.begin_task_create(),
             KeyCode::Char('e') | KeyCode::Enter if self.active_screen == Screen::Tasks => {
-                if let Some(task_id) = self.selected_task_id() {
-                    let (title, description) = self
-                        .selected_task
-                        .and_then(|index| self.tasks.get(index))
-                        .map(|task| (task.title.clone(), task.description.clone()))
-                        .unwrap_or_default();
-                    self.begin_task_input(TaskInputMode::Editing { task_id }, title, description);
-                }
-                vec![AppAction::None]
+                self.begin_task_edit()
             }
-            KeyCode::Char('d') if self.active_screen == Screen::Tasks => self
-                .selected_task_id()
-                .map(|task_id| vec![AppAction::DeleteTask { task_id }])
-                .unwrap_or_else(|| vec![AppAction::None]),
+            KeyCode::Char('d') if self.active_screen == Screen::Tasks => {
+                self.delete_selected_task()
+            }
             KeyCode::Char('t') => {
                 self.theme = match self.theme {
                     Theme::Ember => Theme::Slate,
@@ -556,32 +521,14 @@ impl AppState {
                 vec![AppAction::None]
             }
             KeyCode::Char('a') if self.active_screen == Screen::Workspaces => {
-                self.begin_workspace_input(
-                    WorkspaceInputMode::Creating,
-                    String::new(),
-                    String::new(),
-                );
-                vec![AppAction::None]
+                self.begin_workspace_create()
             }
             KeyCode::Char('e') | KeyCode::Enter if self.active_screen == Screen::Workspaces => {
-                if let Some(workspace_id) = self.selected_workspace_id() {
-                    let (name, path) = self
-                        .selected_workspace
-                        .and_then(|index| self.workspaces.get(index))
-                        .map(|workspace| (workspace.name.clone(), workspace.path.clone()))
-                        .unwrap_or_default();
-                    self.begin_workspace_input(
-                        WorkspaceInputMode::Editing { workspace_id },
-                        name,
-                        path,
-                    );
-                }
-                vec![AppAction::None]
+                self.begin_workspace_edit()
             }
-            KeyCode::Char('d') if self.active_screen == Screen::Workspaces => self
-                .selected_workspace_id()
-                .map(|workspace_id| vec![AppAction::DeleteWorkspace { workspace_id }])
-                .unwrap_or_else(|| vec![AppAction::None]),
+            KeyCode::Char('d') if self.active_screen == Screen::Workspaces => {
+                self.delete_selected_workspace()
+            }
             KeyCode::Char(' ') if self.active_screen == Screen::Workspaces => vec![AppAction::None],
             KeyCode::Char('p') => {
                 self.toggle_pomodoro();
@@ -613,9 +560,38 @@ impl AppState {
                     .map(|entry| entry.target);
                 self.close_launcher();
                 match action {
-                    Some(LauncherTarget::Screen(screen)) => {
-                        self.active_screen = screen;
-                        self.status_line = format!("switched to {}", screen_label(screen));
+                    Some(LauncherTarget::OpenTaskInput) => {
+                        self.begin_task_create();
+                    }
+                    Some(LauncherTarget::EditTask) => {
+                        self.begin_task_edit();
+                    }
+                    Some(LauncherTarget::ToggleTask) => {
+                        if let Some(task_id) = self.selected_task_id() {
+                            return vec![AppAction::ToggleTask { task_id }];
+                        }
+                        self.status_line = "select a task first".to_string();
+                    }
+                    Some(LauncherTarget::DeleteTask) => {
+                        return self.delete_selected_task();
+                    }
+                    Some(LauncherTarget::OpenMindDraft) => {
+                        self.begin_mind_note();
+                    }
+                    Some(LauncherTarget::EditMindDraft) => {
+                        return self.open_selected_mind_item();
+                    }
+                    Some(LauncherTarget::DeleteMindDraft) => {
+                        return self.delete_selected_mind_note();
+                    }
+                    Some(LauncherTarget::OpenWorkspaceInput) => {
+                        self.begin_workspace_create();
+                    }
+                    Some(LauncherTarget::EditWorkspace) => {
+                        self.begin_workspace_edit();
+                    }
+                    Some(LauncherTarget::DeleteWorkspace) => {
+                        return self.delete_selected_workspace();
                     }
                     Some(LauncherTarget::ToggleTheme) => {
                         self.theme = match self.theme {
@@ -1003,6 +979,112 @@ impl AppState {
         }
     }
 
+    fn begin_task_create(&mut self) -> Vec<AppAction> {
+        self.begin_task_input(TaskInputMode::Creating, String::new(), String::new());
+        vec![AppAction::None]
+    }
+
+    fn begin_task_edit(&mut self) -> Vec<AppAction> {
+        if let Some(task_id) = self.selected_task_id() {
+            let (title, description) = self
+                .selected_task
+                .and_then(|index| self.tasks.get(index))
+                .map(|task| (task.title.clone(), task.description.clone()))
+                .unwrap_or_default();
+            self.begin_task_input(TaskInputMode::Editing { task_id }, title, description);
+        } else {
+            self.status_line = "select a task first".to_string();
+        }
+
+        vec![AppAction::None]
+    }
+
+    fn delete_selected_task(&mut self) -> Vec<AppAction> {
+        self.selected_task_id()
+            .map(|task_id| vec![AppAction::DeleteTask { task_id }])
+            .unwrap_or_else(|| {
+                self.status_line = "select a task first".to_string();
+                vec![AppAction::None]
+            })
+    }
+
+    fn begin_mind_note(&mut self) -> Vec<AppAction> {
+        if let Some(vault_id) = self.selected_mind_vault_id() {
+            let vault_root = self
+                .selected_mind_vault_root_path()
+                .unwrap_or_else(|| ".".to_string());
+            self.mind_path_selection = Some(vault_root.clone());
+            self.mind_path_expanded.insert(vault_root.clone());
+            self.begin_mind_draft(
+                MindDraftMode::Creating { vault_id },
+                "# Untitled\n\n".to_string(),
+            );
+        } else {
+            self.status_line = "select a vault first".to_string();
+        }
+
+        vec![AppAction::None]
+    }
+
+    fn open_selected_mind_item(&mut self) -> Vec<AppAction> {
+        match self.selected_mind_entry() {
+            Some(MindTreeEntry::Vault { vault_id }) => {
+                self.toggle_mind_vault(vault_id);
+                vec![AppAction::None]
+            }
+            Some(MindTreeEntry::Note { note_id, .. }) => {
+                if let Some(note) = self.notes.iter().find(|note| note.id == note_id) {
+                    self.begin_mind_draft(
+                        MindDraftMode::Editing { note_id },
+                        self.mind_document
+                            .clone()
+                            .unwrap_or_else(|| markdown_note_document_from(note)),
+                    );
+                }
+                self.sync_mind_document_action()
+            }
+            None => vec![AppAction::None],
+        }
+    }
+
+    fn delete_selected_mind_note(&mut self) -> Vec<AppAction> {
+        self.selected_mind_note_id()
+            .map(|note_id| vec![AppAction::DeleteNote { note_id }])
+            .unwrap_or_else(|| {
+                self.status_line = "select a note to delete".to_string();
+                vec![AppAction::None]
+            })
+    }
+
+    fn begin_workspace_create(&mut self) -> Vec<AppAction> {
+        self.begin_workspace_input(WorkspaceInputMode::Creating, String::new(), String::new());
+        vec![AppAction::None]
+    }
+
+    fn begin_workspace_edit(&mut self) -> Vec<AppAction> {
+        if let Some(workspace_id) = self.selected_workspace_id() {
+            let (name, path) = self
+                .selected_workspace
+                .and_then(|index| self.workspaces.get(index))
+                .map(|workspace| (workspace.name.clone(), workspace.path.clone()))
+                .unwrap_or_default();
+            self.begin_workspace_input(WorkspaceInputMode::Editing { workspace_id }, name, path);
+        } else {
+            self.status_line = "select a workspace first".to_string();
+        }
+
+        vec![AppAction::None]
+    }
+
+    fn delete_selected_workspace(&mut self) -> Vec<AppAction> {
+        self.selected_workspace_id()
+            .map(|workspace_id| vec![AppAction::DeleteWorkspace { workspace_id }])
+            .unwrap_or_else(|| {
+                self.status_line = "select a workspace first".to_string();
+                vec![AppAction::None]
+            })
+    }
+
     fn toggle_mind_vault(&mut self, vault_id: i64) {
         if !self.mind_expanded_vaults.remove(&vault_id) {
             self.mind_expanded_vaults.insert(vault_id);
@@ -1340,10 +1422,11 @@ impl AppState {
 
     fn open_launcher(&mut self) {
         self.launcher = Some(LauncherState {
+            screen: self.active_screen,
             query: String::new(),
             selected: 0,
         });
-        self.status_line = "launcher open".to_string();
+        self.status_line = format!("{} menu open", screen_label(self.active_screen));
     }
 
     fn close_launcher(&mut self) {
@@ -1351,13 +1434,12 @@ impl AppState {
     }
 
     pub fn filtered_launcher_entries(&self) -> Vec<LauncherEntry> {
-        let query = self
-            .launcher
-            .as_ref()
-            .map(|launcher| launcher.query.trim().to_lowercase())
-            .unwrap_or_default();
+        let Some(launcher) = self.launcher.as_ref() else {
+            return Vec::new();
+        };
+        let query = launcher.query.trim().to_lowercase();
+        let entries = self.launcher_entries(launcher.screen);
 
-        let entries = self.launcher_entries();
         if query.is_empty() {
             return entries;
         }
@@ -1372,64 +1454,117 @@ impl AppState {
             .collect()
     }
 
-    fn launcher_entries(&self) -> Vec<LauncherEntry> {
-        vec![
-            LauncherEntry {
-                label: "dashboard".to_string(),
-                hint: "overview".to_string(),
-                target: LauncherTarget::Screen(Screen::Dashboard),
-            },
-            LauncherEntry {
-                label: "tasks".to_string(),
-                hint: format!("{} items", self.tasks.len()),
-                target: LauncherTarget::Screen(Screen::Tasks),
-            },
-            LauncherEntry {
-                label: "mind".to_string(),
-                hint: format!("{} notes", self.notes.len()),
-                target: LauncherTarget::Screen(Screen::Mind),
-            },
-            LauncherEntry {
-                label: "notifications".to_string(),
-                hint: format!("{} alerts", self.notifications.len()),
-                target: LauncherTarget::Screen(Screen::Notifications),
-            },
-            LauncherEntry {
-                label: "workspaces".to_string(),
-                hint: format!("{} contexts", self.workspaces.len()),
-                target: LauncherTarget::Screen(Screen::Workspaces),
-            },
-            LauncherEntry {
-                label: "toggle theme".to_string(),
-                hint: match self.theme {
-                    Theme::Ember => "ember -> slate".to_string(),
-                    Theme::Slate => "slate -> ember".to_string(),
+    fn launcher_entries(&self, screen: Screen) -> Vec<LauncherEntry> {
+        let mut entries = match screen {
+            Screen::Dashboard => vec![
+                LauncherEntry {
+                    label: if self.pomodoro.running {
+                        "pause pomodoro".to_string()
+                    } else {
+                        "start pomodoro".to_string()
+                    },
+                    hint: format!(
+                        "{} remaining",
+                        format_duration(self.pomodoro.remaining_seconds)
+                    ),
+                    target: LauncherTarget::TogglePomodoro,
                 },
-                target: LauncherTarget::ToggleTheme,
-            },
-            LauncherEntry {
-                label: if self.pomodoro.running {
-                    "pause pomodoro".to_string()
-                } else {
-                    "start pomodoro".to_string()
+                LauncherEntry {
+                    label: "reset pomodoro".to_string(),
+                    hint: "return to work phase".to_string(),
+                    target: LauncherTarget::ResetPomodoro,
                 },
-                hint: format!(
-                    "{} remaining",
-                    format_duration(self.pomodoro.remaining_seconds)
-                ),
-                target: LauncherTarget::TogglePomodoro,
-            },
-            LauncherEntry {
-                label: "reset pomodoro".to_string(),
-                hint: "return to work phase".to_string(),
-                target: LauncherTarget::ResetPomodoro,
-            },
-            LauncherEntry {
-                label: "quit".to_string(),
-                hint: "close the app".to_string(),
-                target: LauncherTarget::Quit,
-            },
-        ]
+            ],
+            Screen::Tasks => vec![
+                LauncherEntry {
+                    label: "add task".to_string(),
+                    hint: "open the task editor".to_string(),
+                    target: LauncherTarget::OpenTaskInput,
+                },
+                LauncherEntry {
+                    label: "edit task".to_string(),
+                    hint: "edit the selected task".to_string(),
+                    target: LauncherTarget::EditTask,
+                },
+                LauncherEntry {
+                    label: "toggle task".to_string(),
+                    hint: "flip completed state".to_string(),
+                    target: LauncherTarget::ToggleTask,
+                },
+                LauncherEntry {
+                    label: "delete task".to_string(),
+                    hint: "remove the selected task".to_string(),
+                    target: LauncherTarget::DeleteTask,
+                },
+                LauncherEntry {
+                    label: "toggle theme".to_string(),
+                    hint: match self.theme {
+                        Theme::Ember => "ember -> slate".to_string(),
+                        Theme::Slate => "slate -> ember".to_string(),
+                    },
+                    target: LauncherTarget::ToggleTheme,
+                },
+            ],
+            Screen::Mind => vec![
+                LauncherEntry {
+                    label: "add note".to_string(),
+                    hint: "open the note path picker".to_string(),
+                    target: LauncherTarget::OpenMindDraft,
+                },
+                LauncherEntry {
+                    label: "edit note".to_string(),
+                    hint: "edit the selected note".to_string(),
+                    target: LauncherTarget::EditMindDraft,
+                },
+                LauncherEntry {
+                    label: "delete note".to_string(),
+                    hint: "remove the selected note".to_string(),
+                    target: LauncherTarget::DeleteMindDraft,
+                },
+                LauncherEntry {
+                    label: "toggle theme".to_string(),
+                    hint: match self.theme {
+                        Theme::Ember => "ember -> slate".to_string(),
+                        Theme::Slate => "slate -> ember".to_string(),
+                    },
+                    target: LauncherTarget::ToggleTheme,
+                },
+            ],
+            Screen::Notifications => vec![],
+            Screen::Workspaces => vec![
+                LauncherEntry {
+                    label: "add workspace".to_string(),
+                    hint: "open the workspace editor".to_string(),
+                    target: LauncherTarget::OpenWorkspaceInput,
+                },
+                LauncherEntry {
+                    label: "edit workspace".to_string(),
+                    hint: "edit the selected workspace".to_string(),
+                    target: LauncherTarget::EditWorkspace,
+                },
+                LauncherEntry {
+                    label: "delete workspace".to_string(),
+                    hint: "remove the selected workspace".to_string(),
+                    target: LauncherTarget::DeleteWorkspace,
+                },
+                LauncherEntry {
+                    label: "toggle theme".to_string(),
+                    hint: match self.theme {
+                        Theme::Ember => "ember -> slate".to_string(),
+                        Theme::Slate => "slate -> ember".to_string(),
+                    },
+                    target: LauncherTarget::ToggleTheme,
+                },
+            ],
+        };
+
+        entries.push(LauncherEntry {
+            label: "quit".to_string(),
+            hint: "close the app".to_string(),
+            target: LauncherTarget::Quit,
+        });
+
+        entries
     }
 
     fn push_workspace_input_char(&mut self, c: char) {
@@ -1738,18 +1873,25 @@ mod tests {
             KeyModifiers::NONE,
         )));
 
-        assert!(state.launcher.is_some());
+        assert!(matches!(
+            state.launcher,
+            Some(LauncherState {
+                screen: Screen::Dashboard,
+                ..
+            })
+        ));
     }
 
     #[test]
-    fn launcher_filters_entries() {
+    fn launcher_filters_entries_by_screen_scope() {
         let mut state = AppState::new();
+        state.active_screen = Screen::Tasks;
 
         state.apply(AppEvent::Key(KeyEvent::new(
             KeyCode::Char(':'),
             KeyModifiers::NONE,
         )));
-        for ch in "dash".chars() {
+        for ch in "add".chars() {
             state.apply(AppEvent::Key(KeyEvent::new(
                 KeyCode::Char(ch),
                 KeyModifiers::NONE,
@@ -1758,7 +1900,7 @@ mod tests {
 
         let entries = state.filtered_launcher_entries();
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0].label, "dashboard");
+        assert_eq!(entries[0].label, "add task");
     }
 
     #[test]

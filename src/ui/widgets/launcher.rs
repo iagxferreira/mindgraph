@@ -6,16 +6,23 @@ use ratatui::{
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
 
-use crate::app::AppState;
+use crate::app::{AppState, Screen};
 
 pub fn draw(frame: &mut Frame<'_>, app: &AppState) {
     let overlay = centered_rect(72, 58, frame.area());
     frame.render_widget(Clear, overlay);
 
+    let menu_title = app
+        .launcher
+        .as_ref()
+        .map(|launcher| format!("{} menu", screen_label(launcher.screen)))
+        .unwrap_or_else(|| "menu".to_string());
+
     let block = Block::default()
         .title(Line::from(vec![
             Span::styled(":", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(" command palette"),
+            Span::raw(" "),
+            Span::raw(menu_title),
         ]))
         .borders(Borders::ALL)
         .style(style());
@@ -135,4 +142,14 @@ fn highlight_style() -> Style {
         .bg(Color::Rgb(248, 196, 113))
         .fg(Color::Black)
         .add_modifier(Modifier::BOLD)
+}
+
+fn screen_label(screen: Screen) -> &'static str {
+    match screen {
+        Screen::Dashboard => "dashboard",
+        Screen::Tasks => "tasks",
+        Screen::Mind => "mind",
+        Screen::Notifications => "notifications",
+        Screen::Workspaces => "workspaces",
+    }
 }

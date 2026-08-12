@@ -92,7 +92,7 @@ fn draw_command_bar(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
 fn command_hints(app: &AppState) -> Vec<Span<'static>> {
     let mut hints = vec![
         Span::styled(":", Style::default().add_modifier(Modifier::BOLD)),
-        Span::raw(": launcher"),
+        Span::raw(": scoped menu"),
         Span::raw("  •  "),
         Span::styled("ctrl+l", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(": next screen"),
@@ -221,7 +221,7 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
             Span::raw(": run"),
             Span::raw("  •  "),
             Span::styled("esc", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(": close palette"),
+            Span::raw(": close menu"),
         ]);
     }
 
