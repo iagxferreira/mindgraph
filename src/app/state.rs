@@ -308,6 +308,7 @@ pub struct AppState {
     pub workspace_input_name: String,
     pub workspace_input_path: String,
     pub task_input_mode: Option<TaskInputMode>,
+    pub task_input_work_item_id: Option<i64>,
     pub task_input_focus: TaskInputField,
     pub task_input_title: String,
     pub task_input_description: String,
@@ -359,6 +360,7 @@ impl AppState {
             workspace_input_name: String::new(),
             workspace_input_path: String::new(),
             task_input_mode: None,
+            task_input_work_item_id: None,
             task_input_focus: TaskInputField::Title,
             task_input_title: String::new(),
             task_input_description: String::new(),
@@ -495,10 +497,34 @@ impl AppState {
                 self.sync_mind_document_action()
             }
             AppEvent::TaskCreated(task) => {
+                let task_id = task.id;
+                let contextual_work_item = self.task_input_work_item_id.and_then(|work_item_id| {
+                    self.work_items
+                        .iter()
+                        .find(|work_item| work_item.id == work_item_id)
+                        .cloned()
+                });
                 self.tasks.push(task);
                 self.sync_selection();
+                self.selected_task = self.tasks.iter().position(|current| current.id == task_id);
                 self.clear_task_input();
                 self.status_line = "task created".to_string();
+                if let Some(work_item) = contextual_work_item {
+                    return vec![
+                        AppAction::UpdateWorkItem {
+                            work_item_id: work_item.id,
+                            task_id,
+                            note_id: work_item.note_id,
+                            run_state: work_item.run_state,
+                            pomodoro_session_ids: work_item.pomodoro_session_ids,
+                            started_at_unix: work_item.started_at_unix,
+                            stopped_at_unix: work_item.stopped_at_unix,
+                            elapsed_seconds: work_item.elapsed_seconds,
+                        },
+                        AppAction::None,
+                    ];
+                }
+
                 vec![AppAction::None]
             }
             AppEvent::TaskUpdated(task) => {
@@ -777,7 +803,13 @@ impl AppState {
                 self.close_launcher();
                 match action {
                     Some(LauncherTarget::OpenTaskInput) => {
-                        self.begin_task_create();
+                        if self.active_screen == Screen::Dashboard
+                            && let Some(work_item_id) = self.selected_work_item_id()
+                        {
+                            self.begin_task_create_for_work_item(work_item_id);
+                        } else {
+                            self.begin_task_create();
+                        }
                     }
                     Some(LauncherTarget::EditTask) => {
                         self.begin_task_edit();
@@ -1535,6 +1567,14 @@ impl AppState {
 
     fn begin_task_create(&mut self) -> Vec<AppAction> {
         self.begin_task_input(TaskInputMode::Creating, String::new(), String::new());
+        self.task_input_work_item_id = None;
+        vec![AppAction::None]
+    }
+
+    fn begin_task_create_for_work_item(&mut self, work_item_id: i64) -> Vec<AppAction> {
+        self.begin_task_input(TaskInputMode::Creating, String::new(), String::new());
+        self.task_input_work_item_id = Some(work_item_id);
+        self.status_line = format!("creating task for work item #{work_item_id}");
         vec![AppAction::None]
     }
 
@@ -1826,6 +1866,7 @@ impl AppState {
 
     fn begin_task_input(&mut self, mode: TaskInputMode, title: String, description: String) {
         self.task_input_mode = Some(mode);
+        self.task_input_work_item_id = None;
         self.task_input_focus = TaskInputField::Title;
         self.task_input_title = title;
         self.task_input_description = description;
@@ -1842,6 +1883,7 @@ impl AppState {
 
     fn clear_task_input(&mut self) {
         self.task_input_mode = None;
+        self.task_input_work_item_id = None;
         self.task_input_focus = TaskInputField::Title;
         self.task_input_title.clear();
         self.task_input_description.clear();
@@ -2232,8 +2274,16 @@ impl AppState {
         let mut entries = match screen {
             Screen::Dashboard => vec![
                 LauncherEntry {
-                    label: "add task".to_string(),
-                    hint: "open the task editor".to_string(),
+                    label: if self.selected_work_item.is_some() {
+                        "add task for work item".to_string()
+                    } else {
+                        "add task".to_string()
+                    },
+                    hint: if let Some(work_item_id) = self.selected_work_item_id() {
+                        format!("open the task editor for work item #{work_item_id}")
+                    } else {
+                        "open the task editor".to_string()
+                    },
                     target: LauncherTarget::OpenTaskInput,
                 },
                 LauncherEntry {
@@ -2785,6 +2835,19 @@ mod tests {
     fn dashboard_launcher_add_task_opens_task_input() {
         let mut state = AppState::new();
         state.active_screen = Screen::Dashboard;
+        state.work_items = vec![WorkItem {
+            id: 100,
+            task_id: 1,
+            note_id: 10,
+            run_state: RunState::Idle,
+            pomodoro_session_ids: Vec::new(),
+            started_at_unix: None,
+            stopped_at_unix: None,
+            elapsed_seconds: 0,
+            created_at_unix: 0,
+            updated_at_unix: 0,
+        }];
+        state.selected_work_item = Some(0);
 
         state.apply(AppEvent::Key(KeyEvent::new(
             KeyCode::Char(':'),
@@ -2801,6 +2864,60 @@ mod tests {
             state.task_input_mode,
             Some(TaskInputMode::Creating)
         ));
+        assert_eq!(state.task_input_work_item_id, Some(100));
+    }
+
+    #[test]
+    fn task_created_for_work_item_updates_that_work_item() {
+        let mut state = AppState::new();
+        state.work_items = vec![WorkItem {
+            id: 100,
+            task_id: 1,
+            note_id: 10,
+            run_state: RunState::Idle,
+            pomodoro_session_ids: vec![9],
+            started_at_unix: Some(20),
+            stopped_at_unix: None,
+            elapsed_seconds: 15,
+            created_at_unix: 0,
+            updated_at_unix: 0,
+        }];
+        state.task_input_work_item_id = Some(100);
+
+        let actions = state.apply(AppEvent::TaskCreated(Task {
+            id: 200,
+            title: "new task".to_string(),
+            description: String::new(),
+            doing: false,
+            completed: false,
+            tracked_seconds: 0,
+            created_at_unix: 0,
+        }));
+
+        assert!(matches!(
+            actions.as_slice(),
+            [
+                AppAction::UpdateWorkItem {
+                    work_item_id,
+                    task_id,
+                    note_id,
+                    run_state,
+                    pomodoro_session_ids,
+                    started_at_unix,
+                    stopped_at_unix,
+                    elapsed_seconds,
+                },
+                AppAction::None
+            ] if *work_item_id == 100
+                && *task_id == 200
+                && *note_id == 10
+                && *run_state == RunState::Idle
+                && *pomodoro_session_ids == vec![9]
+                && *started_at_unix == Some(20)
+                && stopped_at_unix.is_none()
+                && *elapsed_seconds == 15
+        ));
+        assert_eq!(state.selected_task, Some(0));
     }
 
     #[test]

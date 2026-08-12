@@ -123,10 +123,15 @@ fn render_details_lines(task: &Task) -> Vec<Line<'static>> {
 fn render_editor_lines(app: &AppState, mode: &TaskInputMode) -> Vec<Line<'static>> {
     let title_focus = matches!(app.task_input_focus, TaskInputField::Title);
     let description_focus = matches!(app.task_input_focus, TaskInputField::Description);
-
-    let description_hint = match mode {
-        TaskInputMode::Creating => "create a task with a title and description.",
-        TaskInputMode::Editing { .. } => "edit the selected task title and description.",
+    let description_hint = if let Some(work_item_id) = app.task_input_work_item_id {
+        format!("create a task for work item #{work_item_id}.")
+    } else {
+        match mode {
+            TaskInputMode::Creating => "create a task with a title and description.".to_string(),
+            TaskInputMode::Editing { .. } => {
+                "edit the selected task title and description.".to_string()
+            }
+        }
     };
 
     vec![

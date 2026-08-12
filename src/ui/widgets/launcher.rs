@@ -153,9 +153,7 @@ fn footer_hints(app: &AppState) -> Vec<Span<'static>> {
             Screen::Dashboard => {
                 hints.push(Span::raw("  •  "));
                 hints.push(Span::styled("a", accent_style()));
-                hints.push(Span::raw(" add task  "));
-                hints.push(Span::styled("w", accent_style()));
-                hints.push(Span::raw(" work item  "));
+                hints.push(Span::raw(" add task for work item  "));
                 hints.push(Span::styled("r/p/s", accent_style()));
                 hints.push(Span::raw(" start/pause/stop"));
             }
