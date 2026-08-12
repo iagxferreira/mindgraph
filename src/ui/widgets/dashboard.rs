@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
-    Frame,
 };
 
 use crate::app::{AppState, PomodoroPhase, Theme};
@@ -30,11 +30,7 @@ pub fn draw(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState)
         Line::from("  j/k or arrows move selection"),
         Line::from("  space toggle task  a add  d delete  t theme  q quit"),
     ])
-    .block(
-        Block::default()
-            .borders(Borders::ALL)
-            .title("dashboard"),
-    )
+    .block(Block::default().borders(Borders::ALL).title("dashboard"))
     .style(style_for_theme(app.theme));
     frame.render_widget(summary, sections[0]);
 
@@ -74,7 +70,11 @@ fn render_pomodoro_lines(app: &AppState) -> Vec<Line<'static>> {
         ]),
         Line::from(vec![
             Span::styled("state: ", Style::default().add_modifier(Modifier::BOLD)),
-            Span::raw(if app.pomodoro.running { "running" } else { "paused" }),
+            Span::raw(if app.pomodoro.running {
+                "running"
+            } else {
+                "paused"
+            }),
         ]),
         Line::from(vec![
             Span::styled("remaining: ", Style::default().add_modifier(Modifier::BOLD)),

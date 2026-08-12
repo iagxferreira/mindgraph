@@ -1,6 +1,6 @@
 use sqlx::{FromRow, SqlitePool};
 
-use crate::app::{current_unix_timestamp, Workspace};
+use crate::app::{Workspace, current_unix_timestamp};
 
 #[derive(Clone)]
 pub struct WorkspaceRepository {
@@ -122,13 +122,21 @@ mod tests {
         assert_eq!(created.path, "/tmp/forge");
 
         let updated = repository
-            .update_workspace(created.id, "forge-rs".to_string(), "/tmp/forge-rs".to_string())
+            .update_workspace(
+                created.id,
+                "forge-rs".to_string(),
+                "/tmp/forge-rs".to_string(),
+            )
             .await
             .expect("update workspace");
         assert_eq!(updated.name, "forge-rs");
         assert_eq!(updated.path, "/tmp/forge-rs");
 
         let workspaces = repository.list_workspaces().await.expect("list");
-        assert!(workspaces.iter().any(|workspace| workspace.name == "forge-rs"));
+        assert!(
+            workspaces
+                .iter()
+                .any(|workspace| workspace.name == "forge-rs")
+        );
     }
 }

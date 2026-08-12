@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-    Frame,
 };
 
 use crate::app::{AppState, Task, TaskInputField, TaskInputMode, Theme};
@@ -53,7 +53,11 @@ fn draw_task_list(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &App
 fn draw_task_panel(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState) {
     if let Some(mode) = &app.task_input_mode {
         let editor = Paragraph::new(render_editor_lines(app, mode))
-            .block(Block::default().title(editor_title(mode)).borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title(editor_title(mode))
+                    .borders(Borders::ALL),
+            )
             .style(style_for_theme(app.theme));
         frame.render_widget(editor, area);
         return;
@@ -93,7 +97,10 @@ fn render_details_lines(task: &Task) -> Vec<Line<'static>> {
         ]),
         Line::from(""),
         Line::from(vec![
-            Span::styled("description: ", Style::default().add_modifier(Modifier::BOLD)),
+            Span::styled(
+                "description: ",
+                Style::default().add_modifier(Modifier::BOLD),
+            ),
             Span::raw(description),
         ]),
         Line::from(""),
@@ -120,7 +127,11 @@ fn render_editor_lines(app: &AppState, mode: &TaskInputMode) -> Vec<Line<'static
         Line::from(""),
         focus_line("title", &app.task_input_title, title_focus),
         Line::from(""),
-        focus_line("description", &app.task_input_description, description_focus),
+        focus_line(
+            "description",
+            &app.task_input_description,
+            description_focus,
+        ),
         Line::from(""),
         Line::from("enter next field/save  tab switch field  esc cancel"),
     ]

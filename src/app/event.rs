@@ -24,12 +24,32 @@ pub enum AppAction {
     None,
     LoadTasks,
     LoadWorkspaces,
-    CreateTask { title: String, description: String },
-    UpdateTask { task_id: i64, title: String, description: String },
-    ToggleTask { task_id: i64 },
-    DeleteTask { task_id: i64 },
-    CreateWorkspace { name: String, path: String },
-    UpdateWorkspace { workspace_id: i64, name: String, path: String },
-    DeleteWorkspace { workspace_id: i64 },
+    CreateTask {
+        title: String,
+        description: String,
+    },
+    UpdateTask {
+        task_id: i64,
+        title: String,
+        description: String,
+    },
+    ToggleTask {
+        task_id: i64,
+    },
+    DeleteTask {
+        task_id: i64,
+    },
+    CreateWorkspace {
+        name: String,
+        path: String,
+    },
+    UpdateWorkspace {
+        workspace_id: i64,
+        name: String,
+        path: String,
+    },
+    DeleteWorkspace {
+        workspace_id: i64,
+    },
     ShowMessage(String),
 }

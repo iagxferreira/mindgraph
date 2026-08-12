@@ -1,9 +1,8 @@
 use std::{env, fs, path::PathBuf};
 
 use sqlx::{
+    Row, SqlitePool,
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
-    Row,
-    SqlitePool,
 };
 
 use crate::storage::{task_repository::TaskRepository, workspace_repository::WorkspaceRepository};
@@ -86,11 +85,9 @@ async fn ensure_task_description_column(pool: &SqlitePool) -> Result<(), sqlx::E
         .any(|row| row.get::<String, _>("name") == "description");
 
     if !has_description {
-        sqlx::query(
-            "ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT ''",
-        )
-        .execute(pool)
-        .await?;
+        sqlx::query("ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+            .execute(pool)
+            .await?;
     }
 
     Ok(())

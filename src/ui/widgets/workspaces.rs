@@ -1,9 +1,9 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout},
     style::{Color, Modifier, Style},
     text::{Line, Span},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-    Frame,
 };
 
 use crate::app::{AppState, Theme, Workspace, WorkspaceInputField, WorkspaceInputMode};
@@ -24,7 +24,10 @@ fn draw_workspace_list(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app:
         .iter()
         .map(|workspace| {
             let content = format!("{}  {}", workspace.name, workspace.path);
-            ListItem::new(Span::styled(content, Style::default().fg(workspace_color(app.theme))))
+            ListItem::new(Span::styled(
+                content,
+                Style::default().fg(workspace_color(app.theme)),
+            ))
         })
         .collect::<Vec<_>>();
 
@@ -47,7 +50,11 @@ fn draw_workspace_list(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app:
 fn draw_workspace_panel(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState) {
     if let Some(mode) = &app.workspace_input_mode {
         let editor = Paragraph::new(render_editor_lines(app, mode))
-            .block(Block::default().title(editor_title(mode)).borders(Borders::ALL))
+            .block(
+                Block::default()
+                    .title(editor_title(mode))
+                    .borders(Borders::ALL),
+            )
             .style(style_for_theme(app.theme));
         frame.render_widget(editor, area);
         return;
@@ -64,13 +71,18 @@ fn draw_workspace_panel(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app
     };
 
     let details = Paragraph::new(body)
-        .block(Block::default().title("workspace details").borders(Borders::ALL))
+        .block(
+            Block::default()
+                .title("workspace details")
+                .borders(Borders::ALL),
+        )
         .style(style_for_theme(app.theme));
     frame.render_widget(details, area);
 }
 
 fn selected_workspace(app: &AppState) -> Option<&Workspace> {
-    app.selected_workspace.and_then(|index| app.workspaces.get(index))
+    app.selected_workspace
+        .and_then(|index| app.workspaces.get(index))
 }
 
 fn render_details_lines(workspace: &Workspace) -> Vec<Line<'static>> {

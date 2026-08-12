@@ -161,7 +161,8 @@ impl AppState {
                 vec![AppAction::None]
             }
             AppEvent::TaskUpdated(task) => {
-                if let Some(existing) = self.tasks.iter_mut().find(|current| current.id == task.id) {
+                if let Some(existing) = self.tasks.iter_mut().find(|current| current.id == task.id)
+                {
                     *existing = task;
                 }
                 self.clear_task_input();
@@ -195,7 +196,8 @@ impl AppState {
                 vec![AppAction::None]
             }
             AppEvent::WorkspaceDeleted(workspace_id) => {
-                self.workspaces.retain(|workspace| workspace.id != workspace_id);
+                self.workspaces
+                    .retain(|workspace| workspace.id != workspace_id);
                 self.sync_workspace_selection();
                 self.clear_workspace_input();
                 self.status_line = "workspace deleted".to_string();
@@ -331,36 +333,34 @@ impl AppState {
                 self.status_line = "task edit cancelled".to_string();
                 vec![AppAction::None]
             }
-            KeyCode::Enter => {
-                match self.task_input_focus {
-                    TaskInputField::Title => {
-                        self.task_input_focus = TaskInputField::Description;
-                        vec![AppAction::None]
+            KeyCode::Enter => match self.task_input_focus {
+                TaskInputField::Title => {
+                    self.task_input_focus = TaskInputField::Description;
+                    vec![AppAction::None]
+                }
+                TaskInputField::Description => {
+                    let title = self.task_input_title.trim().to_string();
+                    if title.is_empty() {
+                        self.status_line = "task title cannot be empty".to_string();
+                        return vec![AppAction::None];
                     }
-                    TaskInputField::Description => {
-                        let title = self.task_input_title.trim().to_string();
-                        if title.is_empty() {
-                            self.status_line = "task title cannot be empty".to_string();
-                            return vec![AppAction::None];
-                        }
 
-                        let description = self.task_input_description.trim().to_string();
-                        match self.task_input_mode.clone() {
-                            Some(TaskInputMode::Creating) => {
-                                vec![AppAction::CreateTask { title, description }]
-                            }
-                            Some(TaskInputMode::Editing { task_id }) => {
-                                vec![AppAction::UpdateTask {
-                                    task_id,
-                                    title,
-                                    description,
-                                }]
-                            }
-                            None => vec![AppAction::None],
+                    let description = self.task_input_description.trim().to_string();
+                    match self.task_input_mode.clone() {
+                        Some(TaskInputMode::Creating) => {
+                            vec![AppAction::CreateTask { title, description }]
                         }
+                        Some(TaskInputMode::Editing { task_id }) => {
+                            vec![AppAction::UpdateTask {
+                                task_id,
+                                title,
+                                description,
+                            }]
+                        }
+                        None => vec![AppAction::None],
                     }
                 }
-            }
+            },
             KeyCode::Tab | KeyCode::Down => {
                 self.task_input_focus = match self.task_input_focus {
                     TaskInputField::Title => TaskInputField::Description,
@@ -491,8 +491,11 @@ impl AppState {
         if self.workspaces.is_empty() {
             self.selected_workspace = None;
         } else {
-            self.selected_workspace =
-                Some(self.selected_workspace.unwrap_or(0).min(self.workspaces.len() - 1));
+            self.selected_workspace = Some(
+                self.selected_workspace
+                    .unwrap_or(0)
+                    .min(self.workspaces.len() - 1),
+            );
         }
     }
 
@@ -502,8 +505,12 @@ impl AppState {
         self.task_input_title = title;
         self.task_input_description = description;
         self.status_line = match self.task_input_mode {
-            Some(TaskInputMode::Creating) => "creating task: type a title and press enter".to_string(),
-            Some(TaskInputMode::Editing { .. }) => "editing task: type a title and press enter".to_string(),
+            Some(TaskInputMode::Creating) => {
+                "creating task: type a title and press enter".to_string()
+            }
+            Some(TaskInputMode::Editing { .. }) => {
+                "editing task: type a title and press enter".to_string()
+            }
             None => "ready".to_string(),
         };
     }
@@ -515,12 +522,7 @@ impl AppState {
         self.task_input_description.clear();
     }
 
-    fn begin_workspace_input(
-        &mut self,
-        mode: WorkspaceInputMode,
-        name: String,
-        path: String,
-    ) {
+    fn begin_workspace_input(&mut self, mode: WorkspaceInputMode, name: String, path: String) {
         self.workspace_input_mode = Some(mode);
         self.workspace_input_focus = WorkspaceInputField::Name;
         self.workspace_input_name = name;
@@ -685,7 +687,10 @@ mod tests {
         let mut state = AppState::new();
         state.active_screen = Screen::Tasks;
 
-        let actions = state.apply(AppEvent::Key(KeyEvent::new(KeyCode::BackTab, KeyModifiers::SHIFT)));
+        let actions = state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::BackTab,
+            KeyModifiers::SHIFT,
+        )));
 
         assert_eq!(state.active_screen, Screen::Dashboard);
         assert!(matches!(actions.as_slice(), [AppAction::None]));
@@ -712,7 +717,10 @@ mod tests {
         state.reset_pomodoro();
         assert!(!state.pomodoro.running);
         assert_eq!(state.pomodoro.phase, PomodoroPhase::Work);
-        assert_eq!(state.pomodoro.remaining_seconds, state.pomodoro.work_seconds);
+        assert_eq!(
+            state.pomodoro.remaining_seconds,
+            state.pomodoro.work_seconds
+        );
     }
 
     #[test]
@@ -745,7 +753,10 @@ mod tests {
         let mut state = AppState::new();
         state.active_screen = Screen::Tasks;
 
-        state.apply(AppEvent::Key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE)));
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Char('a'),
+            KeyModifiers::NONE,
+        )));
 
         assert_eq!(state.task_input_mode, Some(TaskInputMode::Creating));
         assert_eq!(state.task_input_title, "");
@@ -758,12 +769,30 @@ mod tests {
         state.active_screen = Screen::Tasks;
         state.begin_task_input(TaskInputMode::Creating, String::new(), String::new());
 
-        state.apply(AppEvent::Key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE)));
-        state.apply(AppEvent::Key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE)));
-        state.apply(AppEvent::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)));
-        state.apply(AppEvent::Key(KeyEvent::new(KeyCode::Char('o'), KeyModifiers::NONE)));
-        state.apply(AppEvent::Key(KeyEvent::new(KeyCode::Char('k'), KeyModifiers::NONE)));
-        let actions = state.apply(AppEvent::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)));
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Char('h'),
+            KeyModifiers::NONE,
+        )));
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Char('i'),
+            KeyModifiers::NONE,
+        )));
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+        )));
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Char('o'),
+            KeyModifiers::NONE,
+        )));
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Char('k'),
+            KeyModifiers::NONE,
+        )));
+        let actions = state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+        )));
 
         assert!(
             matches!(actions.as_slice(), [AppAction::CreateTask { title, description }] if title == "hi" && description == "ok")

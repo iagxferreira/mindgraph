@@ -1,10 +1,10 @@
 use ratatui::{
+    Frame,
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     symbols,
     text::{Line, Span},
-    widgets::{block::Title, Block, Borders, Paragraph, Tabs},
-    Frame,
+    widgets::{Block, Borders, Paragraph, Tabs, block::Title},
 };
 
 use crate::{
@@ -16,7 +16,11 @@ pub fn draw(frame: &mut Frame<'_>, app: &AppState) {
     let root = frame.area();
     let chunks = Layout::default()
         .direction(Direction::Vertical)
-        .constraints([Constraint::Length(3), Constraint::Min(0), Constraint::Length(2)])
+        .constraints([
+            Constraint::Length(3),
+            Constraint::Min(0),
+            Constraint::Length(2),
+        ])
         .split(root);
 
     draw_header(frame, chunks[0], app);
@@ -137,7 +141,11 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
             hints.extend([
                 Span::raw("  •  "),
                 Span::styled("p", Style::default().add_modifier(Modifier::BOLD)),
-                Span::raw(if app.pomodoro.running { ": pause pomodoro" } else { ": start pomodoro" }),
+                Span::raw(if app.pomodoro.running {
+                    ": pause pomodoro"
+                } else {
+                    ": start pomodoro"
+                }),
                 Span::raw("  •  "),
                 Span::styled("r", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(": reset pomodoro"),

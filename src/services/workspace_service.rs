@@ -12,11 +12,8 @@ pub enum ServiceError {
 #[async_trait]
 pub trait WorkspaceService: Send + Sync {
     async fn list_workspaces(&self) -> Result<Vec<Workspace>, ServiceError>;
-    async fn create_workspace(
-        &self,
-        name: String,
-        path: String,
-    ) -> Result<Workspace, ServiceError>;
+    async fn create_workspace(&self, name: String, path: String)
+    -> Result<Workspace, ServiceError>;
     async fn update_workspace(
         &self,
         workspace_id: i64,

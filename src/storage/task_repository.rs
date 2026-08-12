@@ -1,6 +1,6 @@
 use sqlx::{FromRow, SqlitePool};
 
-use crate::app::{current_unix_timestamp, Task};
+use crate::app::{Task, current_unix_timestamp};
 
 #[derive(Clone)]
 pub struct TaskRepository {
@@ -135,7 +135,10 @@ mod tests {
 
         let repository = TaskRepository::new(pool);
         let created = repository
-            .create_task("ship the milestone".to_string(), "write release notes".to_string())
+            .create_task(
+                "ship the milestone".to_string(),
+                "write release notes".to_string(),
+            )
             .await
             .expect("create task");
 
@@ -147,7 +150,11 @@ mod tests {
         assert!(toggled.completed);
 
         let updated = repository
-            .update_task(created.id, "renamed task".to_string(), "updated body".to_string())
+            .update_task(
+                created.id,
+                "renamed task".to_string(),
+                "updated body".to_string(),
+            )
             .await
             .expect("update");
         assert_eq!(updated.title, "renamed task");
