@@ -86,12 +86,18 @@ async fn process_actions(
                 let tasks = task_service.list_tasks().await?;
                 app.apply(AppEvent::TasksLoaded(tasks));
             }
-            AppAction::CreateTask { title } => {
-                let task = task_service.create_task(title).await?;
+            AppAction::CreateTask { title, description } => {
+                let task = task_service.create_task(title, description).await?;
                 app.apply(AppEvent::TaskCreated(task));
             }
-            AppAction::UpdateTask { task_id, title } => {
-                let task = task_service.update_task(task_id, title).await?;
+            AppAction::UpdateTask {
+                task_id,
+                title,
+                description,
+            } => {
+                let task = task_service
+                    .update_task(task_id, title, description)
+                    .await?;
                 app.apply(AppEvent::TaskUpdated(task));
             }
             AppAction::ToggleTask { task_id } => {

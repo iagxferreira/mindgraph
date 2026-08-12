@@ -2,6 +2,7 @@ use std::{env, fs, path::PathBuf};
 
 use sqlx::{
     sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
+    Row,
     SqlitePool,
 };
 
@@ -43,6 +44,7 @@ pub async fn initialize(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         CREATE TABLE IF NOT EXISTS tasks (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
             completed INTEGER NOT NULL DEFAULT 0,
             created_at_unix INTEGER NOT NULL
         )
@@ -50,6 +52,28 @@ pub async fn initialize(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     )
     .execute(pool)
     .await?;
+
+    ensure_task_description_column(pool).await?;
+
+    Ok(())
+}
+
+async fn ensure_task_description_column(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    let columns = sqlx::query("PRAGMA table_info(tasks)")
+        .fetch_all(pool)
+        .await?;
+
+    let has_description = columns
+        .iter()
+        .any(|row| row.get::<String, _>("name") == "description");
+
+    if !has_description {
+        sqlx::query(
+            "ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+        )
+        .execute(pool)
+        .await?;
+    }
 
     Ok(())
 }
