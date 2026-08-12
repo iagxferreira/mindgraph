@@ -13,6 +13,7 @@ pub enum ServiceError {
 pub trait TaskService: Send + Sync {
     async fn list_tasks(&self) -> Result<Vec<Task>, ServiceError>;
     async fn create_task(&self, title: String) -> Result<Task, ServiceError>;
+    async fn update_task(&self, task_id: i64, title: String) -> Result<Task, ServiceError>;
     async fn toggle_task(&self, task_id: i64) -> Result<Task, ServiceError>;
     async fn delete_task(&self, task_id: i64) -> Result<(), ServiceError>;
 }
@@ -36,6 +37,10 @@ impl TaskService for TaskServiceImpl {
 
     async fn create_task(&self, title: String) -> Result<Task, ServiceError> {
         Ok(self.repository.create_task(title).await?)
+    }
+
+    async fn update_task(&self, task_id: i64, title: String) -> Result<Task, ServiceError> {
+        Ok(self.repository.update_task(task_id, title).await?)
     }
 
     async fn toggle_task(&self, task_id: i64) -> Result<Task, ServiceError> {

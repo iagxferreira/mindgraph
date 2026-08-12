@@ -62,6 +62,23 @@ impl TaskRepository {
         Ok(row.into())
     }
 
+    pub async fn update_task(&self, task_id: i64, title: String) -> Result<Task, sqlx::Error> {
+        let row = sqlx::query_as::<_, TaskRow>(
+            r#"
+            UPDATE tasks
+            SET title = ?2
+            WHERE id = ?1
+            RETURNING id, title, completed, created_at_unix
+            "#,
+        )
+        .bind(task_id)
+        .bind(title)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(row.into())
+    }
+
     pub async fn toggle_task(&self, task_id: i64) -> Result<Task, sqlx::Error> {
         let row = sqlx::query_as::<_, TaskRow>(
             r#"
@@ -115,8 +132,15 @@ mod tests {
         let toggled = repository.toggle_task(created.id).await.expect("toggle");
         assert!(toggled.completed);
 
+        let updated = repository
+            .update_task(created.id, "renamed task".to_string())
+            .await
+            .expect("update");
+        assert_eq!(updated.title, "renamed task");
+
         let tasks = repository.list_tasks().await.expect("list");
         assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].title, "renamed task");
         assert!(tasks[0].completed);
     }
 

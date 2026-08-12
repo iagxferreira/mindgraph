@@ -90,6 +90,10 @@ async fn process_actions(
                 let task = task_service.create_task(title).await?;
                 app.apply(AppEvent::TaskCreated(task));
             }
+            AppAction::UpdateTask { task_id, title } => {
+                let task = task_service.update_task(task_id, title).await?;
+                app.apply(AppEvent::TaskUpdated(task));
+            }
             AppAction::ToggleTask { task_id } => {
                 let task = task_service.toggle_task(task_id).await?;
                 app.apply(AppEvent::TaskUpdated(task));
