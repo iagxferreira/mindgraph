@@ -6,7 +6,7 @@ use sqlx::{
     SqlitePool,
 };
 
-use crate::storage::task_repository::TaskRepository;
+use crate::storage::{task_repository::TaskRepository, workspace_repository::WorkspaceRepository};
 
 #[derive(Clone)]
 pub struct Database {
@@ -36,6 +36,10 @@ impl Database {
     pub fn task_repository(&self) -> TaskRepository {
         TaskRepository::new(self.pool.clone())
     }
+
+    pub fn workspace_repository(&self) -> WorkspaceRepository {
+        WorkspaceRepository::new(self.pool.clone())
+    }
 }
 
 pub async fn initialize(pool: &SqlitePool) -> Result<(), sqlx::Error> {
@@ -54,6 +58,20 @@ pub async fn initialize(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .await?;
 
     ensure_task_description_column(pool).await?;
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS workspaces (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            path TEXT NOT NULL,
+            created_at_unix INTEGER NOT NULL
+        )
+        "#,
+    )
+    .execute(pool)
+    .await?;
+
+    ensure_default_workspace(pool).await?;
 
     Ok(())
 }
@@ -70,6 +88,25 @@ async fn ensure_task_description_column(pool: &SqlitePool) -> Result<(), sqlx::E
     if !has_description {
         sqlx::query(
             "ALTER TABLE tasks ADD COLUMN description TEXT NOT NULL DEFAULT ''",
+        )
+        .execute(pool)
+        .await?;
+    }
+
+    Ok(())
+}
+
+async fn ensure_default_workspace(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+    let count: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM workspaces")
+        .fetch_one(pool)
+        .await?;
+
+    if count.0 == 0 {
+        sqlx::query(
+            r#"
+            INSERT INTO workspaces (name, path, created_at_unix)
+            VALUES ('default', '.', strftime('%s', 'now'))
+            "#,
         )
         .execute(pool)
         .await?;
