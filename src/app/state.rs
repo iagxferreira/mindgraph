@@ -71,8 +71,10 @@ pub struct Note {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct WorkItem {
     pub id: i64,
-    pub task_id: i64,
-    pub note_id: i64,
+    #[serde(default)]
+    pub task_id: Option<i64>,
+    #[serde(default)]
+    pub note_id: Option<i64>,
     pub run_state: RunState,
     #[serde(
         default,
@@ -513,7 +515,7 @@ impl AppState {
                     return vec![
                         AppAction::UpdateWorkItem {
                             work_item_id: work_item.id,
-                            task_id,
+                            task_id: Some(task_id),
                             note_id: work_item.note_id,
                             run_state: work_item.run_state,
                             pomodoro_session_ids: work_item.pomodoro_session_ids,
@@ -1352,15 +1354,12 @@ impl AppState {
             .map(|item| item.id)
     }
 
-    fn selected_run_context(&self) -> Option<(i64, i64)> {
-        Some((self.selected_task_id()?, self.selected_mind_note_id()?))
+    fn selected_run_context(&self) -> (Option<i64>, Option<i64>) {
+        (self.selected_task_id(), self.selected_mind_note_id())
     }
 
     fn select_or_create_run_work_item(&mut self) -> Vec<AppAction> {
-        let Some((task_id, note_id)) = self.selected_run_context() else {
-            self.status_line = "select a task and note first".to_string();
-            return vec![AppAction::None];
-        };
+        let (task_id, note_id) = self.selected_run_context();
 
         if let Some(index) = self
             .work_items
@@ -1372,7 +1371,7 @@ impl AppState {
             return vec![AppAction::None];
         }
 
-        self.status_line = "creating work item for selected task and note".to_string();
+        self.status_line = "creating work item for selected context".to_string();
         vec![AppAction::CreateWorkItem { task_id, note_id }]
     }
 
@@ -1392,34 +1391,39 @@ impl AppState {
             return vec![AppAction::None];
         }
 
-        self.pomodoro.task_id = Some(work_item.task_id);
+        self.pomodoro.task_id = work_item.task_id;
         self.pomodoro.running = true;
         self.status_line = format!(
             "running {} on {}",
-            work_item.task_id,
+            work_item
+                .task_id
+                .map(|task_id| task_id.to_string())
+                .unwrap_or_else(|| "unassigned".to_string()),
             self.notes
                 .iter()
-                .find(|note| note.id == work_item.note_id)
+                .find(|note| Some(note.id) == work_item.note_id)
                 .map(|note| note.title.clone())
                 .unwrap_or_else(|| "note".to_string())
         );
 
-        vec![
-            AppAction::SetTaskDoing {
-                task_id: work_item.task_id,
+        let mut actions = Vec::new();
+        if let Some(task_id) = work_item.task_id {
+            actions.push(AppAction::SetTaskDoing {
+                task_id,
                 doing: true,
-            },
-            AppAction::UpdateWorkItem {
-                work_item_id: work_item.id,
-                task_id: work_item.task_id,
-                note_id: work_item.note_id,
-                run_state: RunState::Running,
-                pomodoro_session_ids: work_item.pomodoro_session_ids.clone(),
-                started_at_unix: work_item.started_at_unix.or(Some(current_unix_timestamp())),
-                stopped_at_unix: None,
-                elapsed_seconds: work_item.elapsed_seconds,
-            },
-        ]
+            });
+        }
+        actions.push(AppAction::UpdateWorkItem {
+            work_item_id: work_item.id,
+            task_id: work_item.task_id,
+            note_id: work_item.note_id,
+            run_state: RunState::Running,
+            pomodoro_session_ids: work_item.pomodoro_session_ids.clone(),
+            started_at_unix: work_item.started_at_unix.or(Some(current_unix_timestamp())),
+            stopped_at_unix: None,
+            elapsed_seconds: work_item.elapsed_seconds,
+        });
+        actions
     }
 
     fn pause_selected_run_work_item(&mut self) -> Vec<AppAction> {
@@ -2772,8 +2776,8 @@ mod tests {
         state.work_items = vec![
             WorkItem {
                 id: 100,
-                task_id: 1,
-                note_id: 10,
+                task_id: Some(1),
+                note_id: Some(10),
                 run_state: RunState::Idle,
                 pomodoro_session_ids: Vec::new(),
                 started_at_unix: None,
@@ -2784,8 +2788,8 @@ mod tests {
             },
             WorkItem {
                 id: 101,
-                task_id: 2,
-                note_id: 11,
+                task_id: Some(2),
+                note_id: Some(11),
                 run_state: RunState::Running,
                 pomodoro_session_ids: vec![7],
                 started_at_unix: None,
@@ -2811,8 +2815,8 @@ mod tests {
         state.active_screen = Screen::Dashboard;
         state.work_items = vec![WorkItem {
             id: 100,
-            task_id: 1,
-            note_id: 10,
+            task_id: Some(1),
+            note_id: Some(10),
             run_state: RunState::Idle,
             pomodoro_session_ids: Vec::new(),
             started_at_unix: None,
@@ -2837,8 +2841,8 @@ mod tests {
         state.active_screen = Screen::Dashboard;
         state.work_items = vec![WorkItem {
             id: 100,
-            task_id: 1,
-            note_id: 10,
+            task_id: Some(1),
+            note_id: Some(10),
             run_state: RunState::Idle,
             pomodoro_session_ids: Vec::new(),
             started_at_unix: None,
@@ -2872,8 +2876,8 @@ mod tests {
         let mut state = AppState::new();
         state.work_items = vec![WorkItem {
             id: 100,
-            task_id: 1,
-            note_id: 10,
+            task_id: Some(1),
+            note_id: Some(10),
             run_state: RunState::Idle,
             pomodoro_session_ids: vec![9],
             started_at_unix: Some(20),
@@ -2909,8 +2913,8 @@ mod tests {
                 },
                 AppAction::None
             ] if *work_item_id == 100
-                && *task_id == 200
-                && *note_id == 10
+                && *task_id == Some(200)
+                && *note_id == Some(10)
                 && *run_state == RunState::Idle
                 && *pomodoro_session_ids == vec![9]
                 && *started_at_unix == Some(20)
@@ -2959,7 +2963,7 @@ mod tests {
         )));
 
         assert!(
-            matches!(actions.as_slice(), [AppAction::CreateWorkItem { task_id, note_id }] if *task_id == 1 && *note_id == 10)
+            matches!(actions.as_slice(), [AppAction::CreateWorkItem { task_id, note_id }] if *task_id == Some(1) && *note_id == Some(10))
         );
     }
 
@@ -2987,8 +2991,8 @@ mod tests {
         }];
         state.work_items = vec![WorkItem {
             id: 100,
-            task_id: 1,
-            note_id: 10,
+            task_id: Some(1),
+            note_id: Some(10),
             run_state: RunState::Idle,
             pomodoro_session_ids: Vec::new(),
             started_at_unix: None,

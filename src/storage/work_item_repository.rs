@@ -31,8 +31,8 @@ impl WorkItemRepository {
 
     pub async fn create_work_item(
         &self,
-        task_id: i64,
-        note_id: i64,
+        task_id: Option<i64>,
+        note_id: Option<i64>,
     ) -> Result<WorkItem, StorageError> {
         let mut data = load_data(&self.root_dir)?;
         let now = crate::app::current_unix_timestamp();
@@ -56,8 +56,8 @@ impl WorkItemRepository {
     pub async fn update_work_item(
         &self,
         work_item_id: i64,
-        task_id: i64,
-        note_id: i64,
+        task_id: Option<i64>,
+        note_id: Option<i64>,
         run_state: RunState,
         pomodoro_session_ids: Vec<i64>,
         started_at_unix: Option<i64>,
@@ -118,19 +118,19 @@ mod tests {
 
         let repository = WorkItemRepository::new(database.root_dir().to_path_buf());
         let created = repository
-            .create_work_item(1, 2)
+            .create_work_item(Some(1), Some(2))
             .await
             .expect("create work item");
 
-        assert_eq!(created.task_id, 1);
-        assert_eq!(created.note_id, 2);
+        assert_eq!(created.task_id, Some(1));
+        assert_eq!(created.note_id, Some(2));
         assert_eq!(created.run_state, RunState::Idle);
 
         let updated = repository
             .update_work_item(
                 created.id,
-                1,
-                2,
+                Some(1),
+                Some(2),
                 RunState::Running,
                 vec![9],
                 Some(10),

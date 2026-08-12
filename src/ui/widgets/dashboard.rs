@@ -149,18 +149,8 @@ fn draw_work_item_panel(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app
 }
 
 fn render_overview_lines(app: &AppState, work_item: &WorkItem) -> Vec<Line<'static>> {
-    let task = app
-        .tasks
-        .iter()
-        .find(|task| task.id == work_item.task_id)
-        .map(|task| task.title.clone())
-        .unwrap_or_else(|| format!("task #{}", work_item.task_id));
-    let note = app
-        .notes
-        .iter()
-        .find(|note| note.id == work_item.note_id)
-        .map(|note| note.title.clone())
-        .unwrap_or_else(|| format!("note #{}", work_item.note_id));
+    let task = resolve_task_title(app, work_item.task_id);
+    let note = resolve_note_title(app, work_item.note_id);
 
     vec![
         Line::from(vec![
@@ -194,18 +184,8 @@ fn selected_work_item(app: &AppState) -> Option<&WorkItem> {
 }
 
 fn render_work_item_label(app: &AppState, work_item: &WorkItem) -> String {
-    let task = app
-        .tasks
-        .iter()
-        .find(|task| task.id == work_item.task_id)
-        .map(|task| task.title.as_str())
-        .unwrap_or("unknown task");
-    let note = app
-        .notes
-        .iter()
-        .find(|note| note.id == work_item.note_id)
-        .map(|note| note.title.as_str())
-        .unwrap_or("unknown note");
+    let task = resolve_task_label(app, work_item.task_id);
+    let note = resolve_note_label(app, work_item.note_id);
 
     format!(
         "{}  {} :: {}  ({})",
@@ -222,6 +202,34 @@ fn style_for_work_item(theme: Theme, work_item: &WorkItem) -> Style {
     } else {
         master_detail::inactive_style(theme)
     }
+}
+
+fn resolve_task_title(app: &AppState, task_id: Option<i64>) -> String {
+    task_id
+        .and_then(|task_id| app.tasks.iter().find(|task| task.id == task_id))
+        .map(|task| task.title.clone())
+        .unwrap_or_else(|| "unassigned task".to_string())
+}
+
+fn resolve_note_title(app: &AppState, note_id: Option<i64>) -> String {
+    note_id
+        .and_then(|note_id| app.notes.iter().find(|note| note.id == note_id))
+        .map(|note| note.title.clone())
+        .unwrap_or_else(|| "unassigned note".to_string())
+}
+
+fn resolve_task_label(app: &AppState, task_id: Option<i64>) -> String {
+    task_id
+        .and_then(|task_id| app.tasks.iter().find(|task| task.id == task_id))
+        .map(|task| task.title.clone())
+        .unwrap_or_else(|| "unassigned task".to_string())
+}
+
+fn resolve_note_label(app: &AppState, note_id: Option<i64>) -> String {
+    note_id
+        .and_then(|note_id| app.notes.iter().find(|note| note.id == note_id))
+        .map(|note| note.title.clone())
+        .unwrap_or_else(|| "unassigned note".to_string())
 }
 
 fn style_for_task(theme: Theme, completed: bool, doing: bool) -> Style {

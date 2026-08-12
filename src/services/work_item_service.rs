@@ -15,12 +15,16 @@ pub enum ServiceError {
 #[async_trait]
 pub trait WorkItemService: Send + Sync {
     async fn list_work_items(&self) -> Result<Vec<WorkItem>, ServiceError>;
-    async fn create_work_item(&self, task_id: i64, note_id: i64) -> Result<WorkItem, ServiceError>;
+    async fn create_work_item(
+        &self,
+        task_id: Option<i64>,
+        note_id: Option<i64>,
+    ) -> Result<WorkItem, ServiceError>;
     async fn update_work_item(
         &self,
         work_item_id: i64,
-        task_id: i64,
-        note_id: i64,
+        task_id: Option<i64>,
+        note_id: Option<i64>,
         run_state: RunState,
         pomodoro_session_ids: Vec<i64>,
         started_at_unix: Option<i64>,
@@ -47,15 +51,19 @@ impl WorkItemService for WorkItemServiceImpl {
         Ok(self.repository.list_work_items().await?)
     }
 
-    async fn create_work_item(&self, task_id: i64, note_id: i64) -> Result<WorkItem, ServiceError> {
+    async fn create_work_item(
+        &self,
+        task_id: Option<i64>,
+        note_id: Option<i64>,
+    ) -> Result<WorkItem, ServiceError> {
         Ok(self.repository.create_work_item(task_id, note_id).await?)
     }
 
     async fn update_work_item(
         &self,
         work_item_id: i64,
-        task_id: i64,
-        note_id: i64,
+        task_id: Option<i64>,
+        note_id: Option<i64>,
         run_state: RunState,
         pomodoro_session_ids: Vec<i64>,
         started_at_unix: Option<i64>,

@@ -149,20 +149,18 @@ fn render_session_label(session: &PomodoroSession) -> String {
     )
 }
 
-fn resolve_task_title(app: &AppState, task_id: i64) -> String {
-    app.tasks
-        .iter()
-        .find(|task| task.id == task_id)
+fn resolve_task_title(app: &AppState, task_id: Option<i64>) -> String {
+    task_id
+        .and_then(|task_id| app.tasks.iter().find(|task| task.id == task_id))
         .map(|task| task.title.clone())
-        .unwrap_or_else(|| format!("task #{task_id}"))
+        .unwrap_or_else(|| "unassigned task".to_string())
 }
 
-fn resolve_note_title(app: &AppState, note_id: i64) -> String {
-    app.notes
-        .iter()
-        .find(|note| note.id == note_id)
+fn resolve_note_title(app: &AppState, note_id: Option<i64>) -> String {
+    note_id
+        .and_then(|note_id| app.notes.iter().find(|note| note.id == note_id))
         .map(|note| note.title.clone())
-        .unwrap_or_else(|| format!("note #{note_id}"))
+        .unwrap_or_else(|| "unassigned note".to_string())
 }
 
 fn run_state_label(state: RunState) -> &'static str {

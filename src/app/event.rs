@@ -87,12 +87,12 @@ pub enum AppAction {
         session: PomodoroSession,
     },
     CreateWorkItem {
-        task_id: i64,
-        note_id: i64,
+        task_id: Option<i64>,
+        note_id: Option<i64>,
     },
     SelectOrCreateWorkItem {
-        task_id: i64,
-        note_id: i64,
+        task_id: Option<i64>,
+        note_id: Option<i64>,
     },
     StartWorkItem {
         work_item_id: i64,
@@ -105,8 +105,8 @@ pub enum AppAction {
     },
     UpdateWorkItem {
         work_item_id: i64,
-        task_id: i64,
-        note_id: i64,
+        task_id: Option<i64>,
+        note_id: Option<i64>,
         run_state: RunState,
         pomodoro_session_ids: Vec<i64>,
         started_at_unix: Option<i64>,
