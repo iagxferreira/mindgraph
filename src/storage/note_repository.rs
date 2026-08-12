@@ -54,13 +54,13 @@ impl NoteRepository {
         vault_id: i64,
         title: String,
         slug: String,
+        path: String,
         document: String,
     ) -> Result<Note, StorageError> {
         let now = current_unix_timestamp();
         let mut data = load_data(&self.root_dir)?;
-        let vault_root = vault_root_path(&data, vault_id)?;
         let note_id = data.allocate_note_id();
-        let path = note_file_path(&vault_root, &slug, note_id);
+        let path = PathBuf::from(path);
         write_document(&path, &document)?;
 
         let note = Note {
@@ -82,21 +82,21 @@ impl NoteRepository {
         note_id: i64,
         title: String,
         slug: String,
+        path: String,
         document: String,
     ) -> Result<Note, StorageError> {
         let mut data = load_data(&self.root_dir)?;
-        let (vault_id, current_path) = data
+        let (current_path, _vault_id) = data
             .notes
             .iter()
             .find(|current| current.id == note_id)
-            .map(|note| (note.vault_id, note.path.clone()))
+            .map(|note| (note.path.clone(), note.vault_id))
             .ok_or(StorageError::NotFound {
                 entity: "note",
                 id: note_id,
             })?;
 
-        let vault_root = vault_root_path(&data, vault_id)?;
-        let next_path = note_file_path(&vault_root, &slug, note_id);
+        let next_path = PathBuf::from(path);
         move_note_file(Path::new(&current_path), &next_path)?;
         write_document(&next_path, &document)?;
 
@@ -146,26 +146,6 @@ impl NoteRepository {
     }
 }
 
-fn vault_root_path(
-    data: &crate::storage::database::StorageData,
-    vault_id: i64,
-) -> Result<PathBuf, StorageError> {
-    data.vaults
-        .iter()
-        .find(|vault| vault.id == vault_id)
-        .map(|vault| PathBuf::from(&vault.root_path))
-        .ok_or(StorageError::NotFound {
-            entity: "vault",
-            id: vault_id,
-        })
-}
-
-fn note_file_path(vault_root: &Path, slug: &str, note_id: i64) -> PathBuf {
-    vault_root
-        .join("notes")
-        .join(format!("{slug}-{note_id}.md"))
-}
-
 fn write_document(path: &Path, document: &str) -> Result<(), StorageError> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -208,6 +188,14 @@ mod tests {
                 1,
                 "Rust".to_string(),
                 "rust".to_string(),
+                temp_dir
+                    .path()
+                    .join("vaults")
+                    .join("default")
+                    .join("notes")
+                    .join("rust.md")
+                    .to_string_lossy()
+                    .into_owned(),
                 "Rust is a systems language.".to_string(),
             )
             .await
@@ -223,6 +211,7 @@ mod tests {
                 created.id,
                 "Rust language".to_string(),
                 "rust-language".to_string(),
+                created.path.clone(),
                 "Rust powers tools.".to_string(),
             )
             .await

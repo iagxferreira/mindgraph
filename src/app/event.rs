@@ -36,12 +36,14 @@ pub enum AppAction {
         vault_id: i64,
         title: String,
         slug: String,
+        path: String,
         document: String,
     },
     UpdateNote {
         note_id: i64,
         title: String,
         slug: String,
+        path: String,
         document: String,
     },
     DeleteNote {

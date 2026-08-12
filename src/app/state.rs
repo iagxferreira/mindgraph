@@ -1,5 +1,7 @@
 use std::{
     collections::BTreeSet,
+    fs,
+    path::{Path, PathBuf},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -73,9 +75,16 @@ pub enum MindDraftMode {
     Editing { note_id: i64 },
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MindDraftFocus {
+    Path,
+    Document,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MindDraft {
     pub mode: MindDraftMode,
+    pub focus: MindDraftFocus,
     pub document: String,
 }
 
@@ -183,6 +192,8 @@ pub struct AppState {
     pub selected_note: Option<usize>,
     pub mind_selection: Option<MindSelection>,
     pub mind_expanded_vaults: BTreeSet<i64>,
+    pub mind_path_selection: Option<String>,
+    pub mind_path_expanded: BTreeSet<String>,
     pub mind_document: Option<String>,
     pub tasks: Vec<Task>,
     pub notifications: Vec<String>,
@@ -215,6 +226,8 @@ impl AppState {
             selected_note: None,
             mind_selection: None,
             mind_expanded_vaults: BTreeSet::new(),
+            mind_path_selection: None,
+            mind_path_expanded: BTreeSet::new(),
             mind_document: None,
             tasks: Vec::new(),
             notifications: Vec::new(),
@@ -469,6 +482,11 @@ impl AppState {
                 .unwrap_or_else(|| vec![AppAction::None]),
             KeyCode::Char('a') if self.active_screen == Screen::Mind => {
                 if let Some(vault_id) = self.selected_mind_vault_id() {
+                    let vault_root = self
+                        .selected_mind_vault_root_path()
+                        .unwrap_or_else(|| ".".to_string());
+                    self.mind_path_selection = Some(vault_root.clone());
+                    self.mind_path_expanded.insert(vault_root.clone());
                     self.begin_mind_draft(
                         MindDraftMode::Creating { vault_id },
                         "# Untitled\n\n".to_string(),
@@ -1075,6 +1093,10 @@ impl AppState {
     fn begin_mind_draft(&mut self, mode: MindDraftMode, document: String) {
         self.mind_draft = Some(MindDraft {
             mode: mode.clone(),
+            focus: match mode {
+                MindDraftMode::Creating { .. } => MindDraftFocus::Path,
+                MindDraftMode::Editing { .. } => MindDraftFocus::Document,
+            },
             document,
         });
         self.status_line = match mode {
@@ -1085,6 +1107,7 @@ impl AppState {
 
     fn clear_mind_draft(&mut self) {
         self.mind_draft = None;
+        self.mind_path_selection = None;
     }
 
     fn handle_mind_draft_key(&mut self, key: KeyEvent) -> Vec<AppAction> {
@@ -1094,37 +1117,97 @@ impl AppState {
             return vec![AppAction::None];
         }
 
+        let Some((mode, focus)) = self
+            .mind_draft
+            .as_ref()
+            .map(|draft| (draft.mode.clone(), draft.focus))
+        else {
+            return vec![AppAction::None];
+        };
+
+        if matches!(mode, MindDraftMode::Creating { .. }) {
+            match key.code {
+                KeyCode::Tab => {
+                    if let Some(draft) = self.mind_draft.as_mut() {
+                        draft.focus = match draft.focus {
+                            MindDraftFocus::Path => MindDraftFocus::Document,
+                            MindDraftFocus::Document => MindDraftFocus::Path,
+                        };
+                    }
+                    return vec![AppAction::None];
+                }
+                KeyCode::Up | KeyCode::Char('k') if matches!(focus, MindDraftFocus::Path) => {
+                    self.move_mind_path_selection(-1);
+                    return vec![AppAction::None];
+                }
+                KeyCode::Down | KeyCode::Char('j') if matches!(focus, MindDraftFocus::Path) => {
+                    self.move_mind_path_selection(1);
+                    return vec![AppAction::None];
+                }
+                KeyCode::Left | KeyCode::Char('h') if matches!(focus, MindDraftFocus::Path) => {
+                    self.collapse_mind_path_selection();
+                    return vec![AppAction::None];
+                }
+                KeyCode::Right | KeyCode::Char('l') if matches!(focus, MindDraftFocus::Path) => {
+                    self.expand_mind_path_selection();
+                    return vec![AppAction::None];
+                }
+                KeyCode::Enter if matches!(focus, MindDraftFocus::Path) => {
+                    if let Some(draft) = self.mind_draft.as_mut() {
+                        draft.focus = MindDraftFocus::Document;
+                    }
+                    return vec![AppAction::None];
+                }
+                _ => {}
+            }
+        }
+
+        if matches!(key.code, KeyCode::Char('s')) && key.modifiers.contains(KeyModifiers::CONTROL) {
+            let Some(snapshot) = self.mind_draft.as_ref() else {
+                return vec![AppAction::None];
+            };
+
+            let title = markdown_note_title(&snapshot.document);
+            let slug = slugify(&title);
+            let path = match snapshot.mode {
+                MindDraftMode::Creating { .. } => self.selected_mind_create_path_for_save(&title),
+                MindDraftMode::Editing { .. } => self.selected_mind_edit_path_for_save(&title),
+            };
+            let document = snapshot.document.clone();
+
+            return match snapshot.mode {
+                MindDraftMode::Creating { vault_id } => vec![AppAction::CreateNote {
+                    vault_id,
+                    title,
+                    slug,
+                    path,
+                    document,
+                }],
+                MindDraftMode::Editing { note_id } => vec![AppAction::UpdateNote {
+                    note_id,
+                    title,
+                    slug,
+                    path,
+                    document,
+                }],
+            };
+        }
+
         let Some(draft) = self.mind_draft.as_mut() else {
             return vec![AppAction::None];
         };
 
         match key.code {
-            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                let title = markdown_note_title(&draft.document);
-                let slug = slugify(&title);
-                let document = draft.document.clone();
-
-                match draft.mode.clone() {
-                    MindDraftMode::Creating { vault_id } => vec![AppAction::CreateNote {
-                        vault_id,
-                        title,
-                        slug,
-                        document,
-                    }],
-                    MindDraftMode::Editing { note_id } => vec![AppAction::UpdateNote {
-                        note_id,
-                        title,
-                        slug,
-                        document,
-                    }],
-                }
-            }
             KeyCode::Enter => {
                 draft.document.push('\n');
                 vec![AppAction::None]
             }
             KeyCode::Tab => {
-                draft.document.push_str("    ");
+                if matches!(draft.mode, MindDraftMode::Creating { .. }) {
+                    draft.document.push_str("    ");
+                } else {
+                    draft.document.push_str("    ");
+                }
                 vec![AppAction::None]
             }
             KeyCode::Backspace => {
@@ -1140,6 +1223,118 @@ impl AppState {
                 vec![AppAction::None]
             }
             _ => vec![AppAction::None],
+        }
+    }
+
+    fn selected_mind_create_path_for_save(&self, title: &str) -> String {
+        let directory = self
+            .mind_path_selection
+            .clone()
+            .or_else(|| self.selected_mind_vault_root_path())
+            .unwrap_or_else(|| ".".to_string());
+
+        Path::new(&directory)
+            .join(format!("{}.md", slugify(title)))
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    fn selected_mind_edit_path_for_save(&self, title: &str) -> String {
+        let existing_path = self.selected_mind_note_path().unwrap_or_default();
+        let parent = Path::new(&existing_path)
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_else(|| PathBuf::from("."));
+        parent
+            .join(format!("{}.md", slugify(title)))
+            .to_string_lossy()
+            .into_owned()
+    }
+
+    pub fn selected_mind_vault_root_path(&self) -> Option<String> {
+        self.selected_mind_vault_id().and_then(|vault_id| {
+            self.vaults
+                .iter()
+                .find(|vault| vault.id == vault_id)
+                .map(|vault| vault.root_path.clone())
+        })
+    }
+
+    fn move_mind_path_selection(&mut self, offset: isize) {
+        let entries = self.visible_mind_paths();
+        if entries.is_empty() {
+            return;
+        }
+
+        let current = self
+            .mind_path_selection
+            .as_ref()
+            .and_then(|selected| entries.iter().position(|entry| entry == selected))
+            .unwrap_or(0) as isize;
+        let next = (current + offset).clamp(0, entries.len().saturating_sub(1) as isize);
+        self.mind_path_selection = Some(entries[next as usize].clone());
+    }
+
+    fn collapse_mind_path_selection(&mut self) {
+        let Some(selected) = self.mind_path_selection.clone() else {
+            return;
+        };
+
+        if self.mind_path_expanded.remove(&selected) {
+            return;
+        }
+
+        if let Some(parent) = Path::new(&selected).parent().and_then(|path| path.to_str()) {
+            self.mind_path_selection = Some(parent.to_string());
+        }
+    }
+
+    fn expand_mind_path_selection(&mut self) {
+        let Some(selected) = self.mind_path_selection.clone() else {
+            return;
+        };
+
+        if !Path::new(&selected).is_dir() {
+            return;
+        }
+
+        self.mind_path_expanded.insert(selected);
+    }
+
+    fn visible_mind_paths(&self) -> Vec<String> {
+        let Some(root) = self.selected_mind_vault_root_path() else {
+            return Vec::new();
+        };
+
+        let mut entries = vec![root.clone()];
+        self.collect_mind_paths(Path::new(&root), 0, &mut entries);
+        entries
+    }
+
+    fn collect_mind_paths(&self, path: &Path, depth: usize, entries: &mut Vec<String>) {
+        if !self
+            .mind_path_expanded
+            .contains(&path.to_string_lossy().into_owned())
+            && depth > 0
+        {
+            return;
+        }
+
+        let mut dirs = match fs::read_dir(path) {
+            Ok(entries) => entries
+                .filter_map(Result::ok)
+                .map(|entry| entry.path())
+                .filter(|child| child.is_dir())
+                .collect::<Vec<_>>(),
+            Err(_) => return,
+        };
+
+        dirs.sort();
+
+        for dir in dirs {
+            let dir_str = dir.to_string_lossy().into_owned();
+            entries.push(dir_str.clone());
+            self.collect_mind_paths(&dir, depth + 1, entries);
         }
     }
 

@@ -5,10 +5,10 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph},
 };
-use std::path::Path;
+use std::{collections::BTreeSet, fs, path::Path};
 
 use crate::{
-    app::{AppState, MindDraft, MindDraftMode, MindSelection, Note},
+    app::{AppState, MindDraft, MindDraftFocus, MindDraftMode, MindSelection, Note},
     ui::widgets::master_detail::{highlight_style, inactive_style, panel_style},
 };
 
@@ -23,6 +23,13 @@ pub fn draw(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState)
 }
 
 fn draw_tree(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState) {
+    if let Some(draft) = &app.mind_draft {
+        if matches!(draft.mode, MindDraftMode::Creating { .. }) {
+            draw_path_picker(frame, area, app, draft);
+            return;
+        }
+    }
+
     let mut lines = Vec::new();
 
     if app.vaults.is_empty() {
@@ -96,6 +103,67 @@ fn draw_tree(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState
     frame.render_widget(tree, area);
 }
 
+fn draw_path_picker(
+    frame: &mut Frame<'_>,
+    area: ratatui::prelude::Rect,
+    app: &AppState,
+    draft: &MindDraft,
+) {
+    let Some(root) = app.selected_mind_vault_root_path() else {
+        frame.render_widget(
+            Paragraph::new(vec![Line::from("missing vault root")])
+                .block(Block::default().title("path").borders(Borders::ALL))
+                .style(panel_style(app.theme)),
+            area,
+        );
+        return;
+    };
+
+    let entries = visible_dirs(Path::new(&root), &app.mind_path_expanded);
+    let mut lines = vec![Line::from(vec![Span::styled(
+        "pick a directory for this note",
+        Style::default().add_modifier(Modifier::BOLD),
+    )])];
+    lines.push(Line::from(""));
+
+    for (path, depth) in entries {
+        let selected = app
+            .mind_path_selection
+            .as_ref()
+            .map(|current| current == &path)
+            .unwrap_or(false);
+        let label = Path::new(&path)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .map(|name| name.to_string())
+            .unwrap_or_else(|| path.clone());
+        let style = if selected {
+            highlight_style(app.theme)
+        } else {
+            panel_style(app.theme)
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled(if selected { ">" } else { " " }, style),
+            Span::raw(" "),
+            Span::raw("  ".repeat(depth)),
+            Span::styled(label, style),
+        ]));
+    }
+
+    lines.push(Line::from(""));
+    lines.push(Line::from(match draft.focus {
+        MindDraftFocus::Path => "path focus  j/k move  h/l expand  tab document",
+        MindDraftFocus::Document => "document focus  tab path  ctrl+s save",
+    }));
+
+    let picker = Paragraph::new(lines)
+        .block(Block::default().title("path").borders(Borders::ALL))
+        .style(panel_style(app.theme));
+
+    frame.render_widget(picker, area);
+}
+
 fn draw_panel(frame: &mut Frame<'_>, area: ratatui::prelude::Rect, app: &AppState) {
     if let Some(draft) = &app.mind_draft {
         draw_editor(frame, area, app, draft);
@@ -153,6 +221,11 @@ fn draw_editor(
             .unwrap_or_else(|| "vault: unknown".to_string()),
     };
     lines.push(Line::from(location));
+    if let MindDraftMode::Creating { .. } = draft.mode {
+        if let Some(path) = &app.mind_path_selection {
+            lines.push(Line::from(format!("directory: {path}")));
+        }
+    }
     lines.push(Line::from(""));
 
     let mut document_lines: Vec<Line<'static>> = if draft.document.trim().is_empty() {
@@ -244,4 +317,37 @@ fn file_name(path: &str) -> Option<String> {
         .file_name()
         .and_then(|name| name.to_str())
         .map(|name| name.to_string())
+}
+
+fn visible_dirs(root: &Path, expanded: &BTreeSet<String>) -> Vec<(String, usize)> {
+    let mut entries = vec![(root.to_string_lossy().into_owned(), 0)];
+    collect_dirs(root, 0, expanded, &mut entries);
+    entries
+}
+
+fn collect_dirs(
+    path: &Path,
+    depth: usize,
+    expanded: &BTreeSet<String>,
+    entries: &mut Vec<(String, usize)>,
+) {
+    let path_str = path.to_string_lossy().into_owned();
+    if depth > 0 && !expanded.contains(&path_str) {
+        return;
+    }
+
+    let mut dirs = match fs::read_dir(path) {
+        Ok(entries) => entries
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|child| child.is_dir())
+            .collect::<Vec<_>>(),
+        Err(_) => return,
+    };
+
+    dirs.sort();
+    for dir in dirs {
+        entries.push((dir.to_string_lossy().into_owned(), depth + 1));
+        collect_dirs(&dir, depth + 1, expanded, entries);
+    }
 }

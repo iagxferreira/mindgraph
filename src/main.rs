@@ -143,10 +143,11 @@ async fn process_actions(
                 vault_id,
                 title,
                 slug,
+                path,
                 document,
             } => {
                 let note = note_service
-                    .create_note(vault_id, title, slug, document)
+                    .create_note(vault_id, title, slug, path, document)
                     .await?;
                 app.apply(AppEvent::NoteCreated(note))
             }
@@ -154,10 +155,11 @@ async fn process_actions(
                 note_id,
                 title,
                 slug,
+                path,
                 document,
             } => {
                 let note = note_service
-                    .update_note(note_id, title, slug, document)
+                    .update_note(note_id, title, slug, path, document)
                     .await?;
                 app.apply(AppEvent::NoteUpdated(note))
             }
