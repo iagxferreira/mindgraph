@@ -19,8 +19,8 @@ pub enum AppEvent {
 pub enum AppAction {
     None,
     LoadTasks,
-    CreateTask { title: String },
-    UpdateTask { task_id: i64, title: String },
+    CreateTask { title: String, description: String },
+    UpdateTask { task_id: i64, title: String, description: String },
     ToggleTask { task_id: i64 },
     DeleteTask { task_id: i64 },
     ShowMessage(String),
