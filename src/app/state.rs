@@ -34,6 +34,12 @@ pub enum Theme {
     Slate,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TaskInputMode {
+    Creating,
+    Editing { task_id: i64 },
+}
+
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub active_screen: Screen,
@@ -44,6 +50,8 @@ pub struct AppState {
     pub selected_workspace: Option<usize>,
     pub theme: Theme,
     pub status_line: String,
+    pub task_input_mode: Option<TaskInputMode>,
+    pub task_input: String,
     pub should_quit: bool,
 }
 
@@ -62,6 +70,8 @@ impl AppState {
             selected_workspace: Some(0),
             theme: Theme::Ember,
             status_line: "Ready".to_string(),
+            task_input_mode: None,
+            task_input: String::new(),
             should_quit: false,
         }
     }
@@ -81,6 +91,7 @@ impl AppState {
             AppEvent::TaskCreated(task) => {
                 self.tasks.push(task);
                 self.sync_selection();
+                self.clear_task_input();
                 self.status_line = "Task created".to_string();
                 vec![AppAction::None]
             }
@@ -88,12 +99,14 @@ impl AppState {
                 if let Some(existing) = self.tasks.iter_mut().find(|current| current.id == task.id) {
                     *existing = task;
                 }
+                self.clear_task_input();
                 self.status_line = "Task updated".to_string();
                 vec![AppAction::None]
             }
             AppEvent::TaskDeleted(task_id) => {
                 self.tasks.retain(|task| task.id != task_id);
                 self.sync_selection();
+                self.clear_task_input();
                 self.status_line = "Task deleted".to_string();
                 vec![AppAction::None]
             }
@@ -105,6 +118,10 @@ impl AppState {
     }
 
     fn handle_key(&mut self, key: KeyEvent) -> Vec<AppAction> {
+        if self.task_input_mode.is_some() {
+            return self.handle_task_input_key(key);
+        }
+
         match key.code {
             KeyCode::Char('q') => {
                 self.should_quit = true;
@@ -128,8 +145,19 @@ impl AppState {
                 .map(|task_id| vec![AppAction::ToggleTask { task_id }])
                 .unwrap_or_else(|| vec![AppAction::None]),
             KeyCode::Char('a') => {
-                let title = format!("Task {}", self.tasks.len() + 1);
-                vec![AppAction::CreateTask { title }]
+                self.begin_task_input(TaskInputMode::Creating, String::new());
+                vec![AppAction::None]
+            }
+            KeyCode::Char('e') | KeyCode::Enter => {
+                if let Some(task_id) = self.selected_task_id() {
+                    let title = self
+                        .selected_task
+                        .and_then(|index| self.tasks.get(index))
+                        .map(|task| task.title.clone())
+                        .unwrap_or_default();
+                    self.begin_task_input(TaskInputMode::Editing { task_id }, title);
+                }
+                vec![AppAction::None]
             }
             KeyCode::Char('d') => self
                 .selected_task_id()
@@ -141,6 +169,42 @@ impl AppState {
                     Theme::Slate => Theme::Ember,
                 };
                 self.status_line = "Theme switched".to_string();
+                vec![AppAction::None]
+            }
+            _ => vec![AppAction::None],
+        }
+    }
+
+    fn handle_task_input_key(&mut self, key: KeyEvent) -> Vec<AppAction> {
+        match key.code {
+            KeyCode::Esc => {
+                self.clear_task_input();
+                self.status_line = "Task edit cancelled".to_string();
+                vec![AppAction::None]
+            }
+            KeyCode::Enter => {
+                let title = self.task_input.trim().to_string();
+                if title.is_empty() {
+                    self.status_line = "Task title cannot be empty".to_string();
+                    return vec![AppAction::None];
+                }
+
+                match self.task_input_mode.clone() {
+                    Some(TaskInputMode::Creating) => {
+                        vec![AppAction::CreateTask { title }]
+                    }
+                    Some(TaskInputMode::Editing { task_id }) => {
+                        vec![AppAction::UpdateTask { task_id, title }]
+                    }
+                    None => vec![AppAction::None],
+                }
+            }
+            KeyCode::Backspace => {
+                self.task_input.pop();
+                vec![AppAction::None]
+            }
+            KeyCode::Char(c) => {
+                self.task_input.push(c);
                 vec![AppAction::None]
             }
             _ => vec![AppAction::None],
@@ -170,6 +234,21 @@ impl AppState {
         } else {
             self.selected_task = Some(self.selected_task.unwrap_or(0).min(self.tasks.len() - 1));
         }
+    }
+
+    fn begin_task_input(&mut self, mode: TaskInputMode, initial_value: String) {
+        self.task_input_mode = Some(mode);
+        self.task_input = initial_value;
+        self.status_line = match self.task_input_mode {
+            Some(TaskInputMode::Creating) => "Creating task: type a title and press Enter".to_string(),
+            Some(TaskInputMode::Editing { .. }) => "Editing task: type a title and press Enter".to_string(),
+            None => "Ready".to_string(),
+        };
+    }
+
+    fn clear_task_input(&mut self) {
+        self.task_input_mode = None;
+        self.task_input.clear();
     }
 }
 
@@ -230,5 +309,29 @@ mod tests {
         ]));
 
         assert_eq!(state.selected_task, Some(1));
+    }
+
+    #[test]
+    fn create_task_opens_input_mode() {
+        let mut state = AppState::new();
+        state.active_screen = Screen::Tasks;
+
+        state.apply(AppEvent::Key(KeyEvent::new(KeyCode::Char('a'), KeyModifiers::NONE)));
+
+        assert_eq!(state.task_input_mode, Some(TaskInputMode::Creating));
+        assert_eq!(state.task_input, "");
+    }
+
+    #[test]
+    fn typing_and_entering_creates_actions() {
+        let mut state = AppState::new();
+        state.active_screen = Screen::Tasks;
+        state.begin_task_input(TaskInputMode::Creating, String::new());
+
+        state.apply(AppEvent::Key(KeyEvent::new(KeyCode::Char('h'), KeyModifiers::NONE)));
+        state.apply(AppEvent::Key(KeyEvent::new(KeyCode::Char('i'), KeyModifiers::NONE)));
+        let actions = state.apply(AppEvent::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::NONE)));
+
+        assert!(matches!(actions.as_slice(), [AppAction::CreateTask { title }] if title == "hi"));
     }
 }
