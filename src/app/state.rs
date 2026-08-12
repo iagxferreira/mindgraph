@@ -1,4 +1,7 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    collections::BTreeSet,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{Deserialize, Serialize};
@@ -9,6 +12,7 @@ use crate::app::{AppAction, AppEvent};
 pub enum Screen {
     Dashboard,
     Tasks,
+    Mind,
     Notifications,
     Workspaces,
 }
@@ -55,6 +59,59 @@ pub struct Link {
     pub target_note_id: i64,
     pub relationship: String,
     pub created_at_unix: i64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MindSelection {
+    Vault { vault_id: i64 },
+    Note { note_id: i64 },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MindDraftMode {
+    Creating { vault_id: i64 },
+    Editing { note_id: i64 },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MindDraftField {
+    Title,
+    Content,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MindDraft {
+    pub mode: MindDraftMode,
+    pub focus: MindDraftField,
+    pub title: String,
+    pub content: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MindTreeEntry {
+    Vault { vault_id: i64 },
+    Note { vault_id: i64, note_id: i64 },
+}
+
+impl MindTreeEntry {
+    fn selection(self) -> MindSelection {
+        match self {
+            MindTreeEntry::Vault { vault_id } => MindSelection::Vault { vault_id },
+            MindTreeEntry::Note { note_id, .. } => MindSelection::Note { note_id },
+        }
+    }
+
+    fn matches(self, selection: MindSelection) -> bool {
+        match (self, selection) {
+            (MindTreeEntry::Vault { vault_id: left }, MindSelection::Vault { vault_id: right }) => {
+                left == right
+            }
+            (MindTreeEntry::Note { note_id: left, .. }, MindSelection::Note { note_id: right }) => {
+                left == right
+            }
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -128,6 +185,12 @@ pub struct LauncherState {
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub active_screen: Screen,
+    pub vaults: Vec<Vault>,
+    pub selected_vault: Option<usize>,
+    pub notes: Vec<Note>,
+    pub selected_note: Option<usize>,
+    pub mind_selection: Option<MindSelection>,
+    pub mind_expanded_vaults: BTreeSet<i64>,
     pub tasks: Vec<Task>,
     pub notifications: Vec<String>,
     pub workspaces: Vec<Workspace>,
@@ -136,6 +199,7 @@ pub struct AppState {
     pub theme: Theme,
     pub status_line: String,
     pub pomodoro: PomodoroState,
+    pub mind_draft: Option<MindDraft>,
     pub workspace_input_mode: Option<WorkspaceInputMode>,
     pub workspace_input_focus: WorkspaceInputField,
     pub workspace_input_name: String,
@@ -152,6 +216,12 @@ impl AppState {
     pub fn new() -> Self {
         Self {
             active_screen: Screen::Dashboard,
+            vaults: Vec::new(),
+            selected_vault: None,
+            notes: Vec::new(),
+            selected_note: None,
+            mind_selection: None,
+            mind_expanded_vaults: BTreeSet::new(),
             tasks: Vec::new(),
             notifications: Vec::new(),
             workspaces: vec![Workspace {
@@ -171,6 +241,7 @@ impl AppState {
                 break_seconds: 5 * 60,
                 completed_sessions: 0,
             },
+            mind_draft: None,
             workspace_input_mode: None,
             workspace_input_focus: WorkspaceInputField::Name,
             workspace_input_name: String::new(),
@@ -186,13 +257,33 @@ impl AppState {
 
     pub fn apply(&mut self, event: AppEvent) -> Vec<AppAction> {
         match event {
-            AppEvent::Started => vec![AppAction::LoadTasks, AppAction::LoadWorkspaces],
+            AppEvent::Started => vec![
+                AppAction::LoadVaults,
+                AppAction::LoadAllNotes,
+                AppAction::LoadTasks,
+                AppAction::LoadWorkspaces,
+            ],
             AppEvent::Tick => {
                 self.tick_pomodoro();
                 vec![AppAction::None]
             }
             AppEvent::Resize => vec![AppAction::None],
             AppEvent::Key(key) => self.handle_key(key),
+            AppEvent::VaultsLoaded(vaults) => {
+                self.vaults = vaults;
+                self.sync_vault_selection();
+                self.expand_all_vaults();
+                self.sync_mind_selection();
+                self.status_line = format!("loaded {} vaults", self.vaults.len());
+                vec![AppAction::None]
+            }
+            AppEvent::NotesLoaded(notes) => {
+                self.notes = notes;
+                self.sort_notes();
+                self.sync_mind_selection();
+                self.status_line = format!("loaded {} notes", self.notes.len());
+                vec![AppAction::None]
+            }
             AppEvent::TasksLoaded(tasks) => {
                 self.tasks = tasks;
                 self.sync_selection();
@@ -203,6 +294,36 @@ impl AppState {
                 self.workspaces = workspaces;
                 self.sync_workspace_selection();
                 self.status_line = format!("loaded {} workspaces", self.workspaces.len());
+                vec![AppAction::None]
+            }
+            AppEvent::NoteCreated(note) => {
+                let note_id = note.id;
+                self.notes.push(note);
+                self.sort_notes();
+                self.clear_mind_draft();
+                self.mind_selection = Some(MindSelection::Note { note_id });
+                self.sync_mind_selection();
+                self.status_line = "note created".to_string();
+                vec![AppAction::None]
+            }
+            AppEvent::NoteUpdated(note) => {
+                let note_id = note.id;
+                if let Some(existing) = self.notes.iter_mut().find(|current| current.id == note.id)
+                {
+                    *existing = note;
+                }
+                self.sort_notes();
+                self.clear_mind_draft();
+                self.mind_selection = Some(MindSelection::Note { note_id });
+                self.sync_mind_selection();
+                self.status_line = "note updated".to_string();
+                vec![AppAction::None]
+            }
+            AppEvent::NoteDeleted(note_id) => {
+                self.notes.retain(|note| note.id != note_id);
+                self.sync_mind_selection();
+                self.clear_mind_draft();
+                self.status_line = "note deleted".to_string();
                 vec![AppAction::None]
             }
             AppEvent::TaskCreated(task) => {
@@ -267,6 +388,10 @@ impl AppState {
             return self.handle_launcher_key(key);
         }
 
+        if self.mind_draft.is_some() {
+            return self.handle_mind_draft_key(key);
+        }
+
         if self.workspace_input_mode.is_some() {
             return self.handle_workspace_input_key(key);
         }
@@ -308,17 +433,69 @@ impl AppState {
                 vec![AppAction::None]
             }
             KeyCode::Up | KeyCode::Char('k') => {
-                self.move_task_selection(-1);
+                match self.active_screen {
+                    Screen::Mind => self.move_mind_selection(-1),
+                    _ => self.move_task_selection(-1),
+                }
                 vec![AppAction::None]
             }
             KeyCode::Down | KeyCode::Char('j') => {
-                self.move_task_selection(1);
+                match self.active_screen {
+                    Screen::Tasks => self.move_task_selection(1),
+                    Screen::Mind => self.move_mind_selection(1),
+                    Screen::Workspaces | Screen::Notifications | Screen::Dashboard => {
+                        self.move_task_selection(1)
+                    }
+                }
                 vec![AppAction::None]
             }
             KeyCode::Char(' ') if self.active_screen == Screen::Tasks => self
                 .selected_task_id()
                 .map(|task_id| vec![AppAction::ToggleTask { task_id }])
                 .unwrap_or_else(|| vec![AppAction::None]),
+            KeyCode::Char('a') if self.active_screen == Screen::Mind => {
+                if let Some(vault_id) = self.selected_mind_vault_id() {
+                    self.begin_mind_draft(
+                        MindDraftMode::Creating { vault_id },
+                        String::new(),
+                        String::new(),
+                    );
+                } else {
+                    self.status_line = "select a vault first".to_string();
+                }
+                vec![AppAction::None]
+            }
+            KeyCode::Char('e') | KeyCode::Enter if self.active_screen == Screen::Mind => {
+                match self.selected_mind_entry() {
+                    Some(MindTreeEntry::Vault { vault_id }) => self.toggle_mind_vault(vault_id),
+                    Some(MindTreeEntry::Note { note_id, .. }) => {
+                        if let Some(note) = self.notes.iter().find(|note| note.id == note_id) {
+                            self.begin_mind_draft(
+                                MindDraftMode::Editing { note_id },
+                                note.title.clone(),
+                                note.content.clone(),
+                            );
+                        }
+                    }
+                    None => {}
+                }
+                vec![AppAction::None]
+            }
+            KeyCode::Char('d') if self.active_screen == Screen::Mind => self
+                .selected_mind_note_id()
+                .map(|note_id| vec![AppAction::DeleteNote { note_id }])
+                .unwrap_or_else(|| {
+                    self.status_line = "select a note to delete".to_string();
+                    vec![AppAction::None]
+                }),
+            KeyCode::Left | KeyCode::Char('h') if self.active_screen == Screen::Mind => {
+                self.collapse_mind_selection();
+                vec![AppAction::None]
+            }
+            KeyCode::Right | KeyCode::Char('l') if self.active_screen == Screen::Mind => {
+                self.expand_mind_selection();
+                vec![AppAction::None]
+            }
             KeyCode::Char('a') if self.active_screen == Screen::Tasks => {
                 self.begin_task_input(TaskInputMode::Creating, String::new(), String::new());
                 vec![AppAction::None]
@@ -618,6 +795,89 @@ impl AppState {
             .map(|workspace| workspace.id)
     }
 
+    fn selected_vault_id(&self) -> Option<i64> {
+        self.selected_vault
+            .and_then(|index| self.vaults.get(index))
+            .map(|vault| vault.id)
+    }
+
+    fn selected_mind_entry(&self) -> Option<MindTreeEntry> {
+        self.mind_selection
+            .or_else(|| {
+                self.mind_entries()
+                    .into_iter()
+                    .next()
+                    .map(|entry| match entry {
+                        MindTreeEntry::Vault { vault_id } => MindSelection::Vault { vault_id },
+                        MindTreeEntry::Note { note_id, .. } => MindSelection::Note { note_id },
+                    })
+            })
+            .and_then(|selection| self.resolve_mind_selection(selection))
+    }
+
+    fn selected_mind_vault_id(&self) -> Option<i64> {
+        match self.selected_mind_entry() {
+            Some(MindTreeEntry::Vault { vault_id }) => Some(vault_id),
+            Some(MindTreeEntry::Note { vault_id, .. }) => Some(vault_id),
+            None => self.selected_vault_id(),
+        }
+    }
+
+    fn selected_mind_note_id(&self) -> Option<i64> {
+        match self.selected_mind_entry() {
+            Some(MindTreeEntry::Note { note_id, .. }) => Some(note_id),
+            _ => None,
+        }
+    }
+
+    fn mind_entries(&self) -> Vec<MindTreeEntry> {
+        let mut entries = Vec::with_capacity(self.vaults.len().saturating_mul(2));
+
+        for vault in &self.vaults {
+            entries.push(MindTreeEntry::Vault { vault_id: vault.id });
+
+            if !self.mind_expanded_vaults.contains(&vault.id) {
+                continue;
+            }
+
+            entries.extend(
+                self.notes
+                    .iter()
+                    .filter(|note| note.vault_id == vault.id)
+                    .map(|note| MindTreeEntry::Note {
+                        vault_id: vault.id,
+                        note_id: note.id,
+                    }),
+            );
+        }
+
+        entries
+    }
+
+    fn resolve_mind_selection(&self, selection: MindSelection) -> Option<MindTreeEntry> {
+        match selection {
+            MindSelection::Vault { vault_id } => self
+                .vaults
+                .iter()
+                .any(|vault| vault.id == vault_id)
+                .then_some(MindTreeEntry::Vault { vault_id }),
+            MindSelection::Note { note_id } => self.notes.iter().find_map(|note| {
+                (note.id == note_id).then_some(MindTreeEntry::Note {
+                    vault_id: note.vault_id,
+                    note_id,
+                })
+            }),
+        }
+    }
+
+    fn sync_vault_selection(&mut self) {
+        if self.vaults.is_empty() {
+            self.selected_vault = None;
+        } else {
+            self.selected_vault = Some(self.selected_vault.unwrap_or(0).min(self.vaults.len() - 1));
+        }
+    }
+
     fn sync_selection(&mut self) {
         if self.tasks.is_empty() {
             self.selected_task = None;
@@ -636,6 +896,98 @@ impl AppState {
                     .min(self.workspaces.len() - 1),
             );
         }
+    }
+
+    fn sync_mind_selection(&mut self) {
+        let entries = self.mind_entries();
+        if entries.is_empty() {
+            self.mind_selection = None;
+            return;
+        }
+
+        if let Some(selection) = self.mind_selection {
+            if self.resolve_mind_selection(selection).is_some() {
+                return;
+            }
+        }
+
+        self.mind_selection = entries.first().map(|entry| match entry {
+            MindTreeEntry::Vault { vault_id } => MindSelection::Vault {
+                vault_id: *vault_id,
+            },
+            MindTreeEntry::Note { note_id, .. } => MindSelection::Note { note_id: *note_id },
+        });
+    }
+
+    fn sort_notes(&mut self) {
+        self.notes.sort_by(|left, right| {
+            right
+                .updated_at_unix
+                .cmp(&left.updated_at_unix)
+                .then_with(|| right.created_at_unix.cmp(&left.created_at_unix))
+                .then_with(|| right.id.cmp(&left.id))
+        });
+    }
+
+    fn expand_all_vaults(&mut self) {
+        self.mind_expanded_vaults
+            .extend(self.vaults.iter().map(|vault| vault.id));
+    }
+
+    fn move_mind_selection(&mut self, offset: isize) {
+        let entries = self.mind_entries();
+        if entries.is_empty() {
+            self.mind_selection = None;
+            return;
+        }
+
+        let current_index = self
+            .mind_selection
+            .and_then(|selection| entries.iter().position(|entry| entry.matches(selection)))
+            .unwrap_or(0) as isize;
+        let next = (current_index + offset).clamp(0, entries.len().saturating_sub(1) as isize);
+        self.mind_selection = Some(entries[next as usize].selection());
+    }
+
+    fn toggle_mind_vault(&mut self, vault_id: i64) {
+        if !self.mind_expanded_vaults.remove(&vault_id) {
+            self.mind_expanded_vaults.insert(vault_id);
+        }
+        self.mind_selection = Some(MindSelection::Vault { vault_id });
+        self.sync_mind_selection();
+    }
+
+    fn expand_mind_selection(&mut self) {
+        match self.selected_mind_entry() {
+            Some(MindTreeEntry::Vault { vault_id }) => {
+                if self.mind_expanded_vaults.insert(vault_id) {
+                    self.mind_selection = Some(MindSelection::Vault { vault_id });
+                } else if let Some(note_id) = self
+                    .notes
+                    .iter()
+                    .find(|note| note.vault_id == vault_id)
+                    .map(|note| note.id)
+                {
+                    self.mind_selection = Some(MindSelection::Note { note_id });
+                }
+            }
+            Some(MindTreeEntry::Note { .. }) | None => {}
+        }
+        self.sync_mind_selection();
+    }
+
+    fn collapse_mind_selection(&mut self) {
+        match self.selected_mind_entry() {
+            Some(MindTreeEntry::Vault { vault_id }) => {
+                self.mind_expanded_vaults.remove(&vault_id);
+                self.mind_selection = Some(MindSelection::Vault { vault_id });
+            }
+            Some(MindTreeEntry::Note { vault_id, .. }) => {
+                self.mind_selection = Some(MindSelection::Vault { vault_id });
+            }
+            None => {}
+        }
+        self.sync_mind_selection();
     }
 
     fn begin_task_input(&mut self, mode: TaskInputMode, title: String, description: String) {
@@ -684,6 +1036,95 @@ impl AppState {
         self.workspace_input_path.clear();
     }
 
+    fn begin_mind_draft(&mut self, mode: MindDraftMode, title: String, content: String) {
+        self.mind_draft = Some(MindDraft {
+            focus: MindDraftField::Title,
+            mode: mode.clone(),
+            title,
+            content,
+        });
+        self.status_line = match mode {
+            MindDraftMode::Creating { .. } => "creating note: ctrl+s saves markdown".to_string(),
+            MindDraftMode::Editing { .. } => "editing note: ctrl+s saves markdown".to_string(),
+        };
+    }
+
+    fn clear_mind_draft(&mut self) {
+        self.mind_draft = None;
+    }
+
+    fn handle_mind_draft_key(&mut self, key: KeyEvent) -> Vec<AppAction> {
+        if matches!(key.code, KeyCode::Esc) {
+            self.clear_mind_draft();
+            self.status_line = "note edit cancelled".to_string();
+            return vec![AppAction::None];
+        }
+
+        let Some(draft) = self.mind_draft.as_mut() else {
+            return vec![AppAction::None];
+        };
+
+        match key.code {
+            KeyCode::Char('s') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                let title = normalized_note_title(&draft.title);
+                let slug = slugify(&title);
+                let content = draft.content.clone();
+
+                match draft.mode.clone() {
+                    MindDraftMode::Creating { vault_id } => vec![AppAction::CreateNote {
+                        vault_id,
+                        title,
+                        slug,
+                        content,
+                    }],
+                    MindDraftMode::Editing { note_id } => vec![AppAction::UpdateNote {
+                        note_id,
+                        title,
+                        slug,
+                        content,
+                    }],
+                }
+            }
+            KeyCode::Enter => match draft.focus {
+                MindDraftField::Title => {
+                    draft.focus = MindDraftField::Content;
+                    vec![AppAction::None]
+                }
+                MindDraftField::Content => {
+                    draft.content.push('\n');
+                    vec![AppAction::None]
+                }
+            },
+            KeyCode::Tab | KeyCode::Down => {
+                draft.focus = match draft.focus {
+                    MindDraftField::Title => MindDraftField::Content,
+                    MindDraftField::Content => MindDraftField::Title,
+                };
+                vec![AppAction::None]
+            }
+            KeyCode::BackTab | KeyCode::Up => {
+                draft.focus = match draft.focus {
+                    MindDraftField::Title => MindDraftField::Content,
+                    MindDraftField::Content => MindDraftField::Title,
+                };
+                vec![AppAction::None]
+            }
+            KeyCode::Backspace => {
+                self.delete_mind_draft_char();
+                vec![AppAction::None]
+            }
+            KeyCode::Char('h') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                self.delete_mind_draft_char();
+                vec![AppAction::None]
+            }
+            KeyCode::Char(c) => {
+                self.push_mind_draft_char(c);
+                vec![AppAction::None]
+            }
+            _ => vec![AppAction::None],
+        }
+    }
+
     fn open_launcher(&mut self) {
         self.launcher = Some(LauncherState {
             query: String::new(),
@@ -729,6 +1170,11 @@ impl AppState {
                 label: "tasks".to_string(),
                 hint: format!("{} items", self.tasks.len()),
                 target: LauncherTarget::Screen(Screen::Tasks),
+            },
+            LauncherEntry {
+                label: "mind".to_string(),
+                hint: format!("{} notes", self.notes.len()),
+                target: LauncherTarget::Screen(Screen::Mind),
             },
             LauncherEntry {
                 label: "notifications".to_string(),
@@ -798,6 +1244,28 @@ impl AppState {
         }
     }
 
+    fn push_mind_draft_char(&mut self, c: char) {
+        if let Some(draft) = self.mind_draft.as_mut() {
+            match draft.focus {
+                MindDraftField::Title => draft.title.push(c),
+                MindDraftField::Content => draft.content.push(c),
+            }
+        }
+    }
+
+    fn delete_mind_draft_char(&mut self) {
+        if let Some(draft) = self.mind_draft.as_mut() {
+            match draft.focus {
+                MindDraftField::Title => {
+                    draft.title.pop();
+                }
+                MindDraftField::Content => {
+                    draft.content.pop();
+                }
+            }
+        }
+    }
+
     fn delete_task_input_char(&mut self) {
         match self.task_input_focus {
             TaskInputField::Title => {
@@ -862,7 +1330,8 @@ impl Default for AppState {
 fn next_screen(screen: Screen) -> Screen {
     match screen {
         Screen::Dashboard => Screen::Tasks,
-        Screen::Tasks => Screen::Notifications,
+        Screen::Tasks => Screen::Mind,
+        Screen::Mind => Screen::Notifications,
         Screen::Notifications => Screen::Workspaces,
         Screen::Workspaces => Screen::Dashboard,
     }
@@ -872,7 +1341,8 @@ fn previous_screen(screen: Screen) -> Screen {
     match screen {
         Screen::Dashboard => Screen::Workspaces,
         Screen::Tasks => Screen::Dashboard,
-        Screen::Notifications => Screen::Tasks,
+        Screen::Mind => Screen::Tasks,
+        Screen::Notifications => Screen::Mind,
         Screen::Workspaces => Screen::Notifications,
     }
 }
@@ -881,8 +1351,43 @@ fn screen_label(screen: Screen) -> &'static str {
     match screen {
         Screen::Dashboard => "dashboard",
         Screen::Tasks => "tasks",
+        Screen::Mind => "mind",
         Screen::Notifications => "notifications",
         Screen::Workspaces => "workspaces",
+    }
+}
+
+fn normalized_note_title(title: &str) -> String {
+    let trimmed = title.trim();
+    if trimmed.is_empty() {
+        "Untitled".to_string()
+    } else {
+        trimmed.to_string()
+    }
+}
+
+fn slugify(input: &str) -> String {
+    let mut slug = String::new();
+    let mut last_was_dash = false;
+
+    for ch in input.chars().flat_map(|ch| ch.to_lowercase()) {
+        if ch.is_ascii_alphanumeric() {
+            slug.push(ch);
+            last_was_dash = false;
+        } else if !last_was_dash && !slug.is_empty() {
+            slug.push('-');
+            last_was_dash = true;
+        }
+    }
+
+    while slug.ends_with('-') {
+        slug.pop();
+    }
+
+    if slug.is_empty() {
+        "untitled".to_string()
+    } else {
+        slug
     }
 }
 
@@ -917,6 +1422,22 @@ mod tests {
     }
 
     #[test]
+    fn ctrl_l_cycles_through_mind_screen() {
+        let mut state = AppState::new();
+
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Char('l'),
+            KeyModifiers::CONTROL,
+        )));
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Char('l'),
+            KeyModifiers::CONTROL,
+        )));
+
+        assert_eq!(state.active_screen, Screen::Mind);
+    }
+
+    #[test]
     fn ctrl_h_cycles_backwards_between_screens() {
         let mut state = AppState::new();
 
@@ -925,6 +1446,22 @@ mod tests {
             KeyModifiers::CONTROL,
         )));
         assert_eq!(state.active_screen, Screen::Workspaces);
+    }
+
+    #[test]
+    fn started_requests_full_note_load() {
+        let mut state = AppState::new();
+        let actions = state.apply(AppEvent::Started);
+
+        assert!(matches!(
+            actions.as_slice(),
+            [
+                AppAction::LoadVaults,
+                AppAction::LoadAllNotes,
+                AppAction::LoadTasks,
+                AppAction::LoadWorkspaces
+            ]
+        ));
     }
 
     #[test]

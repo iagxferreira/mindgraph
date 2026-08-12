@@ -1,7 +1,10 @@
 use async_trait::async_trait;
 use thiserror::Error;
 
-use crate::{app::Task, storage::{task_repository::TaskRepository, StorageError}};
+use crate::{
+    app::Task,
+    storage::{StorageError, task_repository::TaskRepository},
+};
 
 #[derive(Debug, Error)]
 pub enum ServiceError {

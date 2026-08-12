@@ -1,6 +1,6 @@
 use crossterm::event::KeyEvent;
 
-use crate::app::{Task, Workspace};
+use crate::app::{Note, Task, Vault, Workspace};
 
 #[derive(Debug, Clone)]
 pub enum AppEvent {
@@ -8,8 +8,13 @@ pub enum AppEvent {
     Tick,
     Resize,
     Key(KeyEvent),
+    VaultsLoaded(Vec<Vault>),
+    NotesLoaded(Vec<Note>),
     TasksLoaded(Vec<Task>),
     WorkspacesLoaded(Vec<Workspace>),
+    NoteCreated(Note),
+    NoteUpdated(Note),
+    NoteDeleted(i64),
     TaskCreated(Task),
     TaskUpdated(Task),
     TaskDeleted(i64),
@@ -22,8 +27,25 @@ pub enum AppEvent {
 #[derive(Debug, Clone)]
 pub enum AppAction {
     None,
+    LoadVaults,
+    LoadAllNotes,
     LoadTasks,
     LoadWorkspaces,
+    CreateNote {
+        vault_id: i64,
+        title: String,
+        slug: String,
+        content: String,
+    },
+    UpdateNote {
+        note_id: i64,
+        title: String,
+        slug: String,
+        content: String,
+    },
+    DeleteNote {
+        note_id: i64,
+    },
     CreateTask {
         title: String,
         description: String,

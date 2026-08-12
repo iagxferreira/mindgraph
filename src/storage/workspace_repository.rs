@@ -72,7 +72,8 @@ impl WorkspaceRepository {
     pub async fn delete_workspace(&self, workspace_id: i64) -> Result<(), StorageError> {
         let mut data = load_data(&self.root_dir)?;
         let initial_len = data.workspaces.len();
-        data.workspaces.retain(|workspace| workspace.id != workspace_id);
+        data.workspaces
+            .retain(|workspace| workspace.id != workspace_id);
 
         if data.workspaces.len() == initial_len {
             return Err(StorageError::NotFound {

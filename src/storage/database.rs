@@ -95,9 +95,14 @@ impl StorageData {
         self.next_task_id = self
             .next_task_id
             .max(self.tasks.iter().map(|item| item.id).max().unwrap_or(0) + 1);
-        self.next_workspace_id = self
-            .next_workspace_id
-            .max(self.workspaces.iter().map(|item| item.id).max().unwrap_or(0) + 1);
+        self.next_workspace_id = self.next_workspace_id.max(
+            self.workspaces
+                .iter()
+                .map(|item| item.id)
+                .max()
+                .unwrap_or(0)
+                + 1,
+        );
         self.next_vault_id = self
             .next_vault_id
             .max(self.vaults.iter().map(|item| item.id).max().unwrap_or(0) + 1);

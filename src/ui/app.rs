@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{
     app::{AppState, Screen, Theme},
-    ui::widgets::{dashboard, launcher, tasks, workspaces},
+    ui::widgets::{dashboard, launcher, mind, tasks, workspaces},
 };
 
 pub fn draw(frame: &mut Frame<'_>, app: &AppState) {
@@ -27,6 +27,7 @@ pub fn draw(frame: &mut Frame<'_>, app: &AppState) {
     match app.active_screen {
         Screen::Dashboard => dashboard::draw(frame, shell[1], app),
         Screen::Tasks => tasks::draw(frame, shell[1], app),
+        Screen::Mind => mind::draw(frame, shell[1], app),
         Screen::Notifications => dashboard::draw(frame, shell[1], app),
         Screen::Workspaces => workspaces::draw(frame, shell[1], app),
     }
@@ -49,6 +50,9 @@ fn draw_header(frame: &mut Frame<'_>, area: Rect, app: &AppState) {
         Span::raw("  "),
         Span::styled("tasks: ", Style::default().add_modifier(Modifier::BOLD)),
         Span::raw(format!("{}", app.tasks.len())),
+        Span::raw("  "),
+        Span::styled("notes: ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(format!("{}", app.notes.len())),
         Span::raw("  "),
         Span::styled(
             "workspaces: ",
@@ -101,6 +105,22 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
     ];
 
     match app.active_screen {
+        Screen::Mind if app.mind_draft.is_some() => {
+            hints.extend([
+                Span::raw("  •  "),
+                Span::styled("enter", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": next field/newline"),
+                Span::raw("  •  "),
+                Span::styled("tab", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": switch field"),
+                Span::raw("  •  "),
+                Span::styled("ctrl+s", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": save"),
+                Span::raw("  •  "),
+                Span::styled("esc", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": cancel"),
+            ]);
+        }
         Screen::Tasks if app.task_input_mode.is_some() => {
             hints.extend([
                 Span::raw("  •  "),
@@ -141,6 +161,28 @@ fn command_hints(app: &AppState) -> Vec<Span<'static>> {
                 Span::raw("  •  "),
                 Span::styled("space", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(": toggle"),
+                Span::raw("  •  "),
+                Span::styled("d", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": delete"),
+                Span::raw("  •  "),
+                Span::styled("t", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": theme"),
+            ]);
+        }
+        Screen::Mind => {
+            hints.extend([
+                Span::raw("  •  "),
+                Span::styled("j/k", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": move"),
+                Span::raw("  •  "),
+                Span::styled("h/l", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": collapse/expand"),
+                Span::raw("  •  "),
+                Span::styled("e/enter", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": open"),
+                Span::raw("  •  "),
+                Span::styled("a", Style::default().add_modifier(Modifier::BOLD)),
+                Span::raw(": add"),
                 Span::raw("  •  "),
                 Span::styled("d", Style::default().add_modifier(Modifier::BOLD)),
                 Span::raw(": delete"),
@@ -207,6 +249,7 @@ fn screen_label(screen: Screen) -> &'static str {
     match screen {
         Screen::Dashboard => "dashboard",
         Screen::Tasks => "tasks",
+        Screen::Mind => "mind",
         Screen::Notifications => "notifications",
         Screen::Workspaces => "workspaces",
     }

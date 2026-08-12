@@ -1,5 +1,5 @@
-pub mod error;
 pub mod database;
+pub mod error;
 pub mod link_repository;
 pub mod note_repository;
 pub mod task_repository;
