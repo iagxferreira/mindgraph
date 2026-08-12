@@ -107,7 +107,7 @@ mod tests {
         let url = "sqlite::memory:";
         let pool = SqlitePoolOptions::new()
             .max_connections(1)
-            .connect(&url)
+            .connect(url)
             .await
             .expect("create pool");
         initialize(&pool).await.expect("init db");
