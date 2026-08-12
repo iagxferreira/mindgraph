@@ -153,8 +153,9 @@ fn draw_path_picker(
 
     lines.push(Line::from(""));
     lines.push(Line::from(match draft.focus {
-        MindDraftFocus::Path => "path focus  j/k move  h/l expand  tab document",
-        MindDraftFocus::Document => "document focus  tab path  ctrl+s save",
+        MindDraftFocus::Title => "title focus  type name  tab directory",
+        MindDraftFocus::Path => "directory focus  j/k move  h/l expand  tab body",
+        MindDraftFocus::Document => "body focus  tab title  ctrl+s save",
     }));
 
     let picker = Paragraph::new(lines)
@@ -212,6 +213,16 @@ fn draw_editor(
 
     lines.push(Line::from(""));
 
+    let title_style = if matches!(draft.focus, MindDraftFocus::Title) {
+        highlight_style(app.theme)
+    } else {
+        panel_style(app.theme)
+    };
+    lines.push(Line::from(vec![
+        Span::styled("title: ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::styled(draft.title.clone(), title_style),
+    ]));
+
     let location = match draft.mode {
         MindDraftMode::Creating { vault_id } => vault_name(app, vault_id)
             .map(|name| format!("vault: {name}"))
@@ -226,6 +237,36 @@ fn draw_editor(
             lines.push(Line::from(format!("directory: {path}")));
         }
     }
+    lines.push(Line::from(vec![
+        Span::styled("save path: ", Style::default().add_modifier(Modifier::BOLD)),
+        Span::raw(match draft.mode {
+            MindDraftMode::Creating { .. } => app
+                .mind_path_selection
+                .as_ref()
+                .map(|directory| {
+                    Path::new(directory)
+                        .join(format!("{}.md", draft.title.trim().to_lowercase().replace(' ', "-")))
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .unwrap_or_else(|| "select a directory".to_string()),
+            MindDraftMode::Editing { .. } => note_for_id(app, match draft.mode {
+                MindDraftMode::Editing { note_id } => note_id,
+                MindDraftMode::Creating { .. } => unreachable!(),
+            })
+            .map(|note| {
+                let parent = Path::new(&note.path)
+                    .parent()
+                    .map(Path::to_path_buf)
+                    .unwrap_or_else(|| Path::new(".").to_path_buf());
+                parent
+                    .join(format!("{}.md", draft.title.trim().to_lowercase().replace(' ', "-")))
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .unwrap_or_else(|| "unknown".to_string()),
+        }),
+    ]));
     lines.push(Line::from(""));
 
     let mut document_lines: Vec<Line<'static>> = if draft.document.trim().is_empty() {
@@ -241,7 +282,7 @@ fn draw_editor(
     lines.append(&mut document_lines);
     lines.push(Line::from(""));
     lines.push(Line::from(
-        "type markdown directly  tab inserts spaces  ctrl+s save  esc cancel",
+        "type the title or markdown body  tab switches fields  ctrl+s save  esc cancel",
     ));
 
     let editor = Paragraph::new(lines)

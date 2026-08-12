@@ -109,6 +109,7 @@ pub enum MindDraftMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MindDraftFocus {
+    Title,
     Path,
     Document,
 }
@@ -117,6 +118,7 @@ pub enum MindDraftFocus {
 pub struct MindDraft {
     pub mode: MindDraftMode,
     pub focus: MindDraftFocus,
+    pub title: String,
     pub document: String,
 }
 
@@ -1562,7 +1564,8 @@ impl AppState {
             self.mind_path_expanded.insert(vault_root.clone());
             self.begin_mind_draft(
                 MindDraftMode::Creating { vault_id },
-                "# Untitled\n\n".to_string(),
+                "Untitled".to_string(),
+                String::new(),
             );
         } else {
             self.status_line = "select a vault first".to_string();
@@ -1581,6 +1584,7 @@ impl AppState {
                 if let Some(note) = self.notes.iter().find(|note| note.id == note_id) {
                     self.begin_mind_draft(
                         MindDraftMode::Editing { note_id },
+                        note.title.clone(),
                         self.mind_document
                             .clone()
                             .unwrap_or_else(|| markdown_note_document_from(note)),
@@ -1717,13 +1721,14 @@ impl AppState {
         self.workspace_input_path.clear();
     }
 
-    fn begin_mind_draft(&mut self, mode: MindDraftMode, document: String) {
+    fn begin_mind_draft(&mut self, mode: MindDraftMode, title: String, document: String) {
         self.mind_draft = Some(MindDraft {
             mode: mode.clone(),
             focus: match mode {
-                MindDraftMode::Creating { .. } => MindDraftFocus::Path,
-                MindDraftMode::Editing { .. } => MindDraftFocus::Document,
+                MindDraftMode::Creating { .. } => MindDraftFocus::Title,
+                MindDraftMode::Editing { .. } => MindDraftFocus::Title,
             },
+            title,
             document,
         });
         self.status_line = match mode {
@@ -1752,14 +1757,63 @@ impl AppState {
             return vec![AppAction::None];
         };
 
+        if matches!(focus, MindDraftFocus::Title) {
+            match key.code {
+                KeyCode::Tab => {
+                    if let Some(draft) = self.mind_draft.as_mut() {
+                        draft.focus = match mode {
+                            MindDraftMode::Creating { .. } => MindDraftFocus::Path,
+                            MindDraftMode::Editing { .. } => MindDraftFocus::Document,
+                        };
+                    }
+                    return vec![AppAction::None];
+                }
+                KeyCode::Enter => {
+                    if let Some(draft) = self.mind_draft.as_mut() {
+                        draft.focus = match mode {
+                            MindDraftMode::Creating { .. } => MindDraftFocus::Path,
+                            MindDraftMode::Editing { .. } => MindDraftFocus::Document,
+                        };
+                    }
+                    return vec![AppAction::None];
+                }
+                KeyCode::Backspace => {
+                    if let Some(draft) = self.mind_draft.as_mut() {
+                        draft.title.pop();
+                    }
+                    return vec![AppAction::None];
+                }
+                KeyCode::Char('h') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                    if let Some(draft) = self.mind_draft.as_mut() {
+                        draft.title.pop();
+                    }
+                    return vec![AppAction::None];
+                }
+                KeyCode::Char(c) => {
+                    if let Some(draft) = self.mind_draft.as_mut() {
+                        draft.title.push(c);
+                    }
+                    return vec![AppAction::None];
+                }
+                _ => {}
+            }
+        }
+
         if matches!(mode, MindDraftMode::Creating { .. }) {
             match key.code {
                 KeyCode::Tab => {
                     if let Some(draft) = self.mind_draft.as_mut() {
                         draft.focus = match draft.focus {
+                            MindDraftFocus::Title => MindDraftFocus::Path,
                             MindDraftFocus::Path => MindDraftFocus::Document,
-                            MindDraftFocus::Document => MindDraftFocus::Path,
+                            MindDraftFocus::Document => MindDraftFocus::Title,
                         };
+                    }
+                    return vec![AppAction::None];
+                }
+                KeyCode::Enter if matches!(focus, MindDraftFocus::Path) => {
+                    if let Some(draft) = self.mind_draft.as_mut() {
+                        draft.focus = MindDraftFocus::Document;
                     }
                     return vec![AppAction::None];
                 }
@@ -1794,7 +1848,7 @@ impl AppState {
                 return vec![AppAction::None];
             };
 
-            let title = markdown_note_title(&snapshot.document);
+            let title = normalized_note_title(&snapshot.title);
             let slug = slugify(&title);
             let path = match snapshot.mode {
                 MindDraftMode::Creating { .. } => self.selected_mind_create_path_for_save(&title),
@@ -2335,20 +2389,6 @@ fn normalized_note_title(title: &str) -> String {
     }
 }
 
-fn markdown_note_title(document: &str) -> String {
-    for line in document.lines() {
-        let trimmed = line.trim();
-        if let Some(title) = trimmed.strip_prefix("# ") {
-            return normalized_note_title(title);
-        }
-        if !trimmed.is_empty() {
-            return normalized_note_title(trimmed);
-        }
-    }
-
-    "Untitled".to_string()
-}
-
 fn markdown_note_document_from(note: &Note) -> String {
     format!("# {}\n\n", note.title)
 }
@@ -2511,6 +2551,67 @@ mod tests {
         assert_eq!(state.task_input_mode, Some(TaskInputMode::Creating));
         assert_eq!(state.task_input_title, "");
         assert_eq!(state.task_input_description, "");
+    }
+
+    #[test]
+    fn note_creation_uses_explicit_title_and_directory() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let vault_root = temp_dir.path().join("vault-root");
+        fs::create_dir_all(&vault_root).expect("create vault root");
+
+        let mut state = AppState::new();
+        state.vaults = vec![Vault {
+            id: 1,
+            name: "Vault".to_string(),
+            root_path: vault_root.to_string_lossy().into_owned(),
+            created_at_unix: 0,
+        }];
+        state.selected_vault = Some(0);
+
+        let _ = state.begin_mind_note();
+        if let Some(draft) = state.mind_draft.as_mut() {
+            draft.title.clear();
+        }
+
+        for ch in "Project Plan".chars() {
+            state.apply(AppEvent::Key(KeyEvent::new(
+                KeyCode::Char(ch),
+                KeyModifiers::NONE,
+            )));
+        }
+
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+        )));
+        state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Enter,
+            KeyModifiers::NONE,
+        )));
+
+        for ch in "body".chars() {
+            state.apply(AppEvent::Key(KeyEvent::new(
+                KeyCode::Char(ch),
+                KeyModifiers::NONE,
+            )));
+        }
+
+        let actions = state.apply(AppEvent::Key(KeyEvent::new(
+            KeyCode::Char('s'),
+            KeyModifiers::CONTROL,
+        )));
+        let expected_path = vault_root.join("project-plan.md").to_string_lossy().into_owned();
+
+        assert!(
+            matches!(
+                actions.as_slice(),
+                [AppAction::CreateNote { title, slug, path, document, .. }]
+                if title == "Project Plan"
+                    && slug == "project-plan"
+                    && document == "body"
+                    && path == &expected_path
+            )
+        );
     }
 
     #[test]
