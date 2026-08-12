@@ -7,7 +7,7 @@ It is built with Ratatui and keeps the main application flow in `src/app/`, `src
 ## What You Get
 
 - Dashboard, tasks, notifications, and workspaces screens
-- Task and workspace CRUD backed by JSON files
+- File-backed persistence for tasks, workspaces, vaults, notes, and links
 - Launcher overlay for quick navigation and actions
 - Theme toggle and Pomodoro timer
 - Plugin trait surface for future extensions
