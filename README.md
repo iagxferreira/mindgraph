@@ -2,6 +2,12 @@
 
 Forge is a terminal-native productivity environment for software engineers, built in Rust with Ratatui, Crossterm, Tokio, and SQLite via SQLx.
 
+## Preview
+
+Place a screenshot at `assets/screenshots/forge-dashboard.png` and the README will render it here:
+
+![Forge dashboard screenshot](assets/screenshots/forge-dashboard.png)
+
 ## Features
 
 - Dashboard, tasks, notifications, and workspaces screens
@@ -73,8 +79,4 @@ Keep UI code, async services, and storage concerns separated when adding new fea
 
 ## Roadmap
 
-- Add task input and editing flows
-- Implement notifications and workspace screens
-- Add a working pomodoro timer
-- Introduce workspace-specific configuration
-- Expand the plugin system for external integrations
+See [ROADMAP.md](ROADMAP.md) for the current plan. Keep this file updated as work lands.
