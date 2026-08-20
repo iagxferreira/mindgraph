@@ -4,44 +4,47 @@
 
 - Read [README.md](README.md) for the current product shape.
 - Read [ROADMAP.md](ROADMAP.md) to see what is intentionally in scope.
-- Read the current work-item and launcher behavior in `src/app/state.rs` if you are changing navigation or creation flow.
-- Prefer small changes that stay within one layer: app, UI, service, or storage.
+- Read `desktop/src/main/kotlin/dev/mindgraph/state/AppViewModel.kt` if you are
+  changing state, time tracking, or note/link creation flow.
+- Prefer small changes that stay within one layer: model, storage, state, or UI.
 
 ## Local Workflow
 
 - `make run` starts MindGraph.
 - `make test` runs the test suite.
-- `make fmt` formats the codebase.
-- `make clippy` runs lint checks for all targets.
-- `make coverage` generates coverage reporting.
+- `make build` assembles the application.
 
-If you need direct Cargo output, use `cargo test` or `cargo run`.
+If you need direct Gradle output, run from `desktop/`: `./gradlew run`,
+`./gradlew test`, `./gradlew build`.
 
 ## Data Location
 
 MindGraph stores data in `~/.config/mindgraph/` by default.
 
 - `config.json` stores app-level configuration.
-- `data.json` stores tasks, workspaces, vaults, notes, links, pomodoro sessions, and work items.
+- `data.json` stores tasks, workspaces, vaults, notes, links, pomodoro sessions, and
+  work items.
 - Set `MINDGRAPH_HOME` to use a different storage directory.
 - If `HOME` is unavailable, the fallback root is `./.mindgraph/`.
 - The storage directory is created on first launch if it does not already exist.
 
 ## Style
 
-- Keep Rust formatting standard and let `cargo fmt` handle whitespace.
-- Use `snake_case` for functions and modules.
+- Use standard Kotlin formatting: 4-space indentation.
+- Use `camelCase` for functions and properties.
 - Use `PascalCase` for types.
 - Favor small, explicit functions over shared mutable state.
 
 ## Testing
 
-- Use `#[test]` for synchronous logic.
-- Use `#[tokio::test]` for async repository or service tests.
-- Name tests by behavior, such as `repository_round_trip_persists_workspaces`.
-- When work-item flows change, add coverage for dashboard selection, launcher actions, and the task/note attachment path.
+- Use `kotlin.test`'s `@Test` for test cases.
+- Use `kotlinx-coroutines-test`'s `runTest` for suspend-function tests.
+- Name tests by behavior, such as `readsRustShapedDataJsonIncludingLegacyPomodoroAlias`.
+- When storage changes, add or update round-trip coverage confirming the persisted
+  `data.json` keeps the field names and shape other tooling expects.
 
-Focus coverage on reducer behavior, file-backed persistence, service logic, and non-trivial widget logic.
+Focus coverage on repository behavior, file-backed persistence, view model state
+transitions, and non-trivial layout/canvas logic.
 
 ## Commits
 
