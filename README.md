@@ -1,32 +1,38 @@
 # MindGraph
 
-MindGraph is a pane-driven terminal workspace for tasks, markdown notes, work items, Pomodoro tracking, and workspaces.
+MindGraph is a knowledge-base builder: a graph of linked notes correlated with time
+tracking, so you can see where study and work time actually went.
 
-It is built with Ratatui and keeps the main application flow in `src/app/`, `src/ui/`, `src/services/`, and `src/storage/`.
+It is built with Kotlin and Compose Multiplatform for Desktop. The app lives in
+`desktop/`, with `model/`, `storage/`, `state/`, and `ui/` packages under
+`desktop/src/main/kotlin/dev/mindgraph/`.
 
 ## What You Get
 
-- Dashboard, tasks, mind, run, pomodoro, notifications, and workspaces screens
-- File-backed persistence for tasks, workspaces, vaults, notes, links, pomodoro sessions, and work items
-- Launcher overlay for screen-scoped actions and direct `goto` jumps by id
-- Markdown note editing with explicit title and filesystem path selection
-- Work items as the main work context, with optional task and note links plus linked Pomodoro sessions
-- Dashboard controls for creating tasks, selecting work items, and managing work sessions
-- Theme toggle and Pomodoro timer
-- Plugin trait surface for future extensions
+- A pannable/zoomable graph of notes and the links between them
+- Node size encodes cumulative tracked time for that note — the graph doubles as a
+  picture of where your time went
+- Click-to-select a note, click-two-nodes to link them with a relationship label
+- Per-note markdown editing (title + body)
+- Per-note start/pause/stop time tracking, logged as pomodoro sessions
+- File-backed persistence for tasks, workspaces, vaults, notes, links, pomodoro
+  sessions, and work items
 
 ## Getting Started
 
 ```bash
-cargo run
+cd desktop
+./gradlew run
 ```
 
 By default MindGraph stores data in `~/.config/mindgraph/`.
 
-On first launch, MindGraph creates the storage directory structure if it does not already exist.
+On first launch, MindGraph creates the storage directory structure if it does not
+already exist.
 
 - `config.json` stores app-level configuration.
-- `data.json` stores tasks, workspaces, vaults, notes, links, pomodoro sessions, and work items.
+- `data.json` stores tasks, workspaces, vaults, notes, links, pomodoro sessions, and
+  work items.
 - `workspaces/` is the default workspace root under the storage directory.
 
 To change the storage location, set `MINDGRAPH_HOME` to a different directory.
@@ -37,10 +43,10 @@ If `HOME` is unavailable, MindGraph falls back to `./.mindgraph/`.
 ```bash
 make run
 make test
-make fmt
-make clippy
-make coverage
+make build
 ```
+
+Or from `desktop/` directly: `./gradlew run`, `./gradlew test`, `./gradlew build`.
 
 ## Documentation
 
@@ -51,14 +57,21 @@ make coverage
 
 ## Project Layout
 
-- `src/app/` owns `AppState`, events, and reducer-style state changes
-- `src/ui/` renders screens and widgets
-- `src/services/` contains async service traits and implementations
-- `src/storage/` owns JSON-backed persistence and repositories
-- `src/plugins/` defines the plugin trait surface
+- `desktop/src/main/kotlin/dev/mindgraph/model/` defines the domain models, matching
+  the Rust-era `data.json` schema field-for-field
+- `desktop/src/main/kotlin/dev/mindgraph/storage/` owns JSON-backed persistence and
+  repositories
+- `desktop/src/main/kotlin/dev/mindgraph/state/` holds `AppViewModel` (the single
+  source of truth for UI state) and the force-directed graph layout engine
+- `desktop/src/main/kotlin/dev/mindgraph/ui/` renders the graph canvas, note detail
+  panel, and time-tracking panel
 
 ## Current Focus
 
-The current product is a TUI shell for tasks, markdown notes, linked work items, workspaces, and Pomodoro tracking.
-The dashboard now acts as the main work surface, the launcher supports screen-scoped commands plus direct id jumps, and work items can exist before their task or note is attached.
-The next polish work is around making those partial work items easier to inspect, attach, and resume.
+The current product is the notes graph plus time tracking: a canvas of notes and
+links where node size reflects tracked time, a detail panel for editing a note and
+managing its links, and start/pause/stop tracking per note.
+
+Deferred for a later pass: a Tasks screen, a Workspaces screen, notifications, and a
+command launcher — all still supported by the storage layer, just without dedicated
+UI yet.
