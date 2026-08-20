@@ -1,31 +1,23 @@
 SHELL := /bin/sh
 
-.PHONY: help run check test fmt clippy coverage
+.PHONY: help run test build clean
 
 help:
 	@printf '%s\n' \
 		'mindgraph targets:' \
-		'  make run       - run the TUI application' \
-		'  make check     - type-check the project' \
-		'  make test      - run the test suite' \
-		'  make fmt       - format the codebase' \
-		'  make clippy    - run clippy on all targets' \
-		'  make coverage  - run coverage reporting'
+		'  make run    - run the desktop application' \
+		'  make test   - run the test suite' \
+		'  make build  - assemble the application' \
+		'  make clean  - remove build output'
 
 run:
-	cargo run
-
-check:
-	cargo check
+	cd desktop && ./gradlew run
 
 test:
-	cargo test
+	cd desktop && ./gradlew test
 
-fmt:
-	cargo fmt
+build:
+	cd desktop && ./gradlew build
 
-clippy:
-	cargo clippy --all-targets --all-features
-
-coverage:
-	cargo llvm-cov --workspace --all-features
+clean:
+	cd desktop && ./gradlew clean
