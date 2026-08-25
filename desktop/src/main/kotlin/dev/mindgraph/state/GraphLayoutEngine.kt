@@ -1,7 +1,7 @@
 package dev.mindgraph.state
 
 import androidx.compose.runtime.mutableStateMapOf
-import dev.mindgraph.model.Link
+import dev.mindgraph.model.Edge
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -14,23 +14,40 @@ data class Vec2(val x: Float, val y: Float) {
 }
 
 /**
- * A small force-directed layout: nodes repel each other, edges act as springs pulling
- * linked notes together, and everything is pulled gently toward the center. Run [step]
- * on a timer while the graph is visible; positions live in a Compose snapshot map so
- * the canvas redraws automatically as they move.
+ * A small force-directed layout: nodes repel each other, edges act as springs pulling linked
+ * nodes together, and everything is pulled gently toward the center. Positions live in a
+ * Compose snapshot map so the canvas redraws as they move.
  */
 class GraphLayoutEngine {
-    val positions = mutableStateMapOf<Long, Vec2>()
-    private val velocities = HashMap<Long, Vec2>()
+    val positions = mutableStateMapOf<String, Vec2>()
+    private val velocities = HashMap<String, Vec2>()
+    private val pinned = HashSet<String>()
     private val random = Random(42)
-    private var nodeIds: List<Long> = emptyList()
-    private var links: List<Link> = emptyList()
+    private var nodeIds: List<String> = emptyList()
+    private var edges: List<Edge> = emptyList()
 
-    fun sync(noteIds: List<Long>, links: List<Link>) {
-        val idSet = noteIds.toSet()
+    fun isPinned(id: String): Boolean = id in pinned
+
+    /** Pinned nodes keep their position through [step] — drag sets this, double-click clears it. */
+    fun setPinned(id: String, isPinned: Boolean) {
+        if (isPinned) {
+            pinned.add(id)
+            velocities[id] = Vec2(0f, 0f)
+        } else {
+            pinned.remove(id)
+        }
+    }
+
+    fun unpinAll() {
+        pinned.clear()
+    }
+
+    fun sync(ids: List<String>, edges: List<Edge>) {
+        val idSet = ids.toSet()
         positions.keys.retainAll(idSet)
         velocities.keys.retainAll(idSet)
-        for (id in noteIds) {
+        pinned.retainAll(idSet)
+        for (id in ids) {
             if (id !in positions) {
                 val angle = random.nextDouble(0.0, 2 * Math.PI)
                 val radius = 80.0 + random.nextDouble(0.0, 140.0)
@@ -38,8 +55,8 @@ class GraphLayoutEngine {
                 velocities[id] = Vec2(0f, 0f)
             }
         }
-        nodeIds = noteIds
-        this.links = links
+        nodeIds = ids
+        this.edges = edges
     }
 
     fun step() {
@@ -52,7 +69,7 @@ class GraphLayoutEngine {
         val damping = 0.82f
         val centerPull = 0.0015f
 
-        val forces = HashMap<Long, Vec2>(ids.size)
+        val forces = HashMap<String, Vec2>(ids.size)
         for (id in ids) forces[id] = Vec2(0f, 0f)
 
         for (i in ids.indices) {
@@ -73,20 +90,23 @@ class GraphLayoutEngine {
             }
         }
 
-        for (link in links) {
-            val pa = positions[link.sourceNoteId] ?: continue
-            val pb = positions[link.targetNoteId] ?: continue
+        for (edge in edges) {
+            val source = edge.sourceId.value
+            val target = edge.targetId.value
+            val pa = positions[source] ?: continue
+            val pb = positions[target] ?: continue
             val dx = pb.x - pa.x
             val dy = pb.y - pa.y
             val dist = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
             val force = (dist - springLength) * springStrength
             val fx = dx / dist * force
             val fy = dy / dist * force
-            forces[link.sourceNoteId] = (forces[link.sourceNoteId] ?: Vec2(0f, 0f)) + Vec2(fx, fy)
-            forces[link.targetNoteId] = (forces[link.targetNoteId] ?: Vec2(0f, 0f)) - Vec2(fx, fy)
+            forces[source] = (forces[source] ?: Vec2(0f, 0f)) + Vec2(fx, fy)
+            forces[target] = (forces[target] ?: Vec2(0f, 0f)) - Vec2(fx, fy)
         }
 
         for (id in ids) {
+            if (id in pinned) continue
             val pos = positions[id] ?: continue
             val pull = pos * -centerPull
             val vel = ((velocities[id] ?: Vec2(0f, 0f)) + (forces[id] ?: Vec2(0f, 0f)) + pull) * damping
