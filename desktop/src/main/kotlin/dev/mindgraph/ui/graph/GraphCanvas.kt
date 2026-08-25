@@ -71,7 +71,7 @@ fun GraphCanvas(
         zoom = 1f
     }
 
-    LaunchedEffect(nodeIds, edges) {
+    LaunchedEffect(nodeIds, edges, layout.mode) {
         while (true) {
             layout.step()
             delay(16)
