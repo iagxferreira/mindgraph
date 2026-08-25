@@ -78,5 +78,3 @@ data class WorkItem(
     @SerialName("created_at_unix") val createdAtUnix: Long,
     @SerialName("updated_at_unix") val updatedAtUnix: Long,
 )
-
-fun currentUnixTimestamp(): Long = System.currentTimeMillis() / 1000
