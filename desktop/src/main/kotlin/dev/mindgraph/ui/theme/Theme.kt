@@ -1,30 +1,52 @@
 package dev.mindgraph.ui.theme
 
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
 
-val Ink = Color(0xFF10131A)
-val Surface = Color(0xFF171B24)
-val SurfaceHigh = Color(0xFF1F2430)
-val Accent = Color(0xFF7C9CFF)
-val AccentSoft = Color(0xFF3A4A73)
-val TextPrimary = Color(0xFFE7EAF2)
-val TextMuted = Color(0xFF9AA3B8)
+// A restrained palette: one accent color, everything else tonal grays derived from it.
+val Ink = Color(0xFF0E0F12)
+val Surface = Color(0xFF17191D)
+val SurfaceHigh = Color(0xFF1F2227)
+val Border = Color(0xFF2A2D33)
+val Accent = Color(0xFF8C93FF)
+val TextPrimary = Color(0xFFE8E9EC)
+val TextMuted = Color(0xFF8B909B)
+
+// Semantic state, kept separate from [Accent] so "selected" and "blocked" never read as the
+// same thing. Two hues only — status should be legible, not a rainbow.
+val Blocked = Color(0xFFE0A45E)
+val Done = Color(0xFF77BE97)
+
+/** A quieter variant of [Accent] for de-emphasized strokes/fills, kept as one hue not two. */
+val AccentSoft: Color get() = Accent.copy(alpha = 0.35f)
 
 private val MindGraphColorScheme = darkColorScheme(
     background = Ink,
     surface = Surface,
     surfaceVariant = SurfaceHigh,
+    outline = Border,
+    outlineVariant = Border,
     primary = Accent,
-    secondary = AccentSoft,
+    secondary = Accent,
     onBackground = TextPrimary,
     onSurface = TextPrimary,
+    onSurfaceVariant = TextMuted,
     onPrimary = Ink,
+)
+
+private val MindGraphShapes = Shapes(
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(6.dp),
+    medium = RoundedCornerShape(8.dp),
+    large = RoundedCornerShape(10.dp),
 )
 
 @Composable
 fun MindGraphTheme(content: @Composable () -> Unit) {
-    MaterialTheme(colorScheme = MindGraphColorScheme, content = content)
+    MaterialTheme(colorScheme = MindGraphColorScheme, shapes = MindGraphShapes, content = content)
 }

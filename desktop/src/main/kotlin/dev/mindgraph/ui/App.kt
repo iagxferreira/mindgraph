@@ -1,0 +1,119 @@
+package dev.mindgraph.ui
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Surface
+import androidx.compose.material3.VerticalDivider
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import dev.mindgraph.model.NodeId
+import dev.mindgraph.state.AppViewModel
+import dev.mindgraph.storage.NodeStore
+import dev.mindgraph.storage.SessionLog
+import dev.mindgraph.storage.Vault
+import dev.mindgraph.ui.graph.GraphScreen
+import dev.mindgraph.ui.notes.NotesScreen
+import dev.mindgraph.ui.shell.Destination
+import dev.mindgraph.ui.shell.NavRail
+import dev.mindgraph.ui.theme.Ink
+import dev.mindgraph.ui.theme.MindGraphTheme
+import dev.mindgraph.ui.work.WorkScreen
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
+/**
+ * App content: theme, vault bootstrap, and destination selection. Kept separate from Main.kt
+ * so the window (chrome, sizing, close behavior) doesn't own app state.
+ */
+@Composable
+fun App() {
+    MindGraphTheme {
+        Surface(modifier = Modifier.fillMaxSize(), color = Ink) {
+            var viewModel by remember { mutableStateOf<AppViewModel?>(null) }
+
+            LaunchedEffect(Unit) {
+                val vault = withContext(Dispatchers.IO) {
+                    Vault.default().also { it.prepare() }
+                }
+                viewModel = AppViewModel(NodeStore(vault), SessionLog(vault))
+            }
+
+            val model = viewModel
+            if (model == null) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                AppShell(model)
+            }
+        }
+    }
+}
+
+/**
+ * The nav rail plus the active destination. Link-in-progress state lives here because linking
+ * spans two destinations: you start it on a node and finish it on the graph.
+ */
+@Composable
+private fun AppShell(viewModel: AppViewModel) {
+    var destination by remember { mutableStateOf(Destination.Graph) }
+    var linkSourceId by remember { mutableStateOf<NodeId?>(null) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(viewModel.statusMessage) {
+        snackbarHostState.showSnackbar(viewModel.statusMessage)
+    }
+
+    val openNode: (NodeId) -> Unit = { nodeId ->
+        viewModel.selectNode(nodeId)
+        destination = Destination.Notes
+    }
+
+    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
+        Row(modifier = Modifier.fillMaxSize().padding(padding)) {
+            NavRail(current = destination, onSelect = { destination = it })
+            VerticalDivider()
+
+            when (destination) {
+                Destination.Graph -> GraphScreen(
+                    viewModel = viewModel,
+                    linkSourceId = linkSourceId,
+                    onStartLink = { linkSourceId = it },
+                    onCancelLink = { linkSourceId = null },
+                    onOpenNode = openNode,
+                    modifier = Modifier.weight(1f),
+                )
+
+                Destination.Notes -> NotesScreen(
+                    viewModel = viewModel,
+                    linkSourceId = linkSourceId,
+                    onStartLink = { nodeId ->
+                        linkSourceId = nodeId
+                        destination = Destination.Graph
+                    },
+                    onCancelLink = { linkSourceId = null },
+                    modifier = Modifier.weight(1f),
+                )
+
+
+                Destination.Work -> WorkScreen(
+                    viewModel = viewModel,
+                    onOpenNode = openNode,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+    }
+}
