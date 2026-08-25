@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CheckCircleOutline
 import androidx.compose.material.icons.outlined.Description
 import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Timer
@@ -33,6 +34,7 @@ import dev.mindgraph.ui.theme.TextMuted
 enum class Destination(val label: String, val icon: ImageVector) {
     Graph("Graph", Icons.Outlined.Hub),
     Notes("Notes", Icons.Outlined.Description),
+    Tasks("Tasks", Icons.Outlined.CheckCircleOutline),
     Work("Work", Icons.Outlined.Timer),
 }
 
