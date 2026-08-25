@@ -130,6 +130,10 @@ All under `desktop/src/main/kotlin/dev/mindgraph/`.
 - [ROADMAP.md](ROADMAP.md) product direction and upcoming work
 - [BENCHMARK.md](BENCHMARK.md) benchmark notes and methodology
 
+## License
+
+[MIT](LICENSE).
+
 ## Where this is going
 
 The graph is meant to become the unifying surface over every kind of entity, not a
