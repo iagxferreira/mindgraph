@@ -27,6 +27,7 @@ import dev.mindgraph.ui.graph.GraphScreen
 import dev.mindgraph.ui.notes.NotesScreen
 import dev.mindgraph.ui.shell.Destination
 import dev.mindgraph.ui.shell.NavRail
+import dev.mindgraph.ui.tasks.TasksScreen
 import dev.mindgraph.ui.theme.Ink
 import dev.mindgraph.ui.theme.MindGraphTheme
 import dev.mindgraph.ui.work.WorkScreen
@@ -107,6 +108,11 @@ private fun AppShell(viewModel: AppViewModel) {
                     modifier = Modifier.weight(1f),
                 )
 
+                Destination.Tasks -> TasksScreen(
+                    viewModel = viewModel,
+                    onOpenNode = openNode,
+                    modifier = Modifier.weight(1f),
+                )
 
                 Destination.Work -> WorkScreen(
                     viewModel = viewModel,
