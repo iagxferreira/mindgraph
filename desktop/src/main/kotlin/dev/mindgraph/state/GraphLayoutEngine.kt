@@ -14,17 +14,22 @@ data class Vec2(val x: Float, val y: Float) {
 }
 
 /**
- * A small force-directed layout: nodes repel each other, edges act as springs pulling linked
- * nodes together, and everything is pulled gently toward the center. Positions live in a
- * Compose snapshot map so the canvas redraws as they move.
+ * Mind mode is a force-directed layout for associative thinking; Flow mode is a layered
+ * left-to-right layout for dependencies. They are separate because springs actively scramble
+ * the ordering a dependency graph exists to show.
  */
+enum class LayoutMode { Mind, Flow }
+
 class GraphLayoutEngine {
     val positions = mutableStateMapOf<String, Vec2>()
     private val velocities = HashMap<String, Vec2>()
     private val pinned = HashSet<String>()
+    private val flowTargets = HashMap<String, Vec2>()
     private val random = Random(42)
     private var nodeIds: List<String> = emptyList()
     private var edges: List<Edge> = emptyList()
+
+    var mode: LayoutMode = LayoutMode.Mind
 
     fun isPinned(id: String): Boolean = id in pinned
 
@@ -47,6 +52,7 @@ class GraphLayoutEngine {
         positions.keys.retainAll(idSet)
         velocities.keys.retainAll(idSet)
         pinned.retainAll(idSet)
+        flowTargets.keys.retainAll(idSet)
         for (id in ids) {
             if (id !in positions) {
                 val angle = random.nextDouble(0.0, 2 * Math.PI)
@@ -59,7 +65,48 @@ class GraphLayoutEngine {
         this.edges = edges
     }
 
+    /**
+     * Places each node in the column matching its dependency depth, stacked within the column.
+     * Positions ease toward these targets in [step] so switching modes reads as a movement
+     * rather than a cut.
+     */
+    fun setFlowRanks(ranks: Map<String, Int>) {
+        flowTargets.clear()
+        if (ranks.isEmpty()) return
+
+        val columnWidth = 260f
+        val rowHeight = 96f
+        val byRank = ranks.entries.groupBy({ it.value }, { it.key })
+        val maxRank = byRank.keys.maxOrNull() ?: 0
+
+        byRank.forEach { (rank, idsInRank) ->
+            val ordered = idsInRank.sorted()
+            ordered.forEachIndexed { index, id ->
+                val x = (rank - maxRank / 2f) * columnWidth
+                val y = (index - (ordered.size - 1) / 2f) * rowHeight
+                flowTargets[id] = Vec2(x, y)
+            }
+        }
+    }
+
     fun step() {
+        when (mode) {
+            LayoutMode.Mind -> stepForces()
+            LayoutMode.Flow -> stepTowardFlowTargets()
+        }
+    }
+
+    private fun stepTowardFlowTargets() {
+        val easing = 0.18f
+        for (id in nodeIds) {
+            if (id in pinned) continue
+            val target = flowTargets[id] ?: continue
+            val current = positions[id] ?: continue
+            positions[id] = current + (target - current) * easing
+        }
+    }
+
+    private fun stepForces() {
         val ids = nodeIds
         if (ids.size < 2) return
 

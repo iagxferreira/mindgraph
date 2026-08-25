@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -35,6 +36,7 @@ import androidx.compose.ui.unit.dp
 import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.NodeId
 import dev.mindgraph.state.AppViewModel
+import dev.mindgraph.state.LayoutMode
 import dev.mindgraph.ui.theme.Accent
 import dev.mindgraph.ui.theme.Blocked
 import dev.mindgraph.ui.theme.Border
@@ -58,8 +60,16 @@ fun GraphScreen(
 ) {
     var pendingTarget by remember { mutableStateOf<Pair<NodeId, NodeId>?>(null) }
     var viewResetKey by remember { mutableStateOf(0) }
+    var mode by remember { mutableStateOf(LayoutMode.Mind) }
 
     val graph = viewModel.graph
+
+    LaunchedEffect(mode, viewModel.nodes, viewModel.edges) {
+        viewModel.layout.mode = mode
+        if (mode == LayoutMode.Flow) {
+            viewModel.layout.setFlowRanks(graph.ranks().mapKeys { it.key.value })
+        }
+    }
 
     Box(modifier = modifier.fillMaxSize().background(Ink)) {
         GraphCanvas(
@@ -86,6 +96,7 @@ fun GraphScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            ModeToggle(mode = mode, onChange = { mode = it })
             CountsPill(
                 nodeCount = viewModel.nodes.size,
                 edgeCount = viewModel.edges.size,
@@ -188,6 +199,35 @@ private fun LinkKindDialog(
             }
         },
     )
+}
+
+@Composable
+private fun ModeToggle(mode: LayoutMode, onChange: (LayoutMode) -> Unit) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(SurfaceHigh)
+            .border(1.dp, Border, RoundedCornerShape(10.dp))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        LayoutMode.entries.forEach { candidate ->
+            val isActive = candidate == mode
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(7.dp))
+                    .background(if (isActive) Accent.copy(alpha = 0.18f) else Color.Transparent)
+                    .clickable { onChange(candidate) }
+                    .padding(horizontal = 12.dp, vertical = 7.dp),
+            ) {
+                Text(
+                    candidate.name,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = if (isActive) Accent else TextMuted,
+                )
+            }
+        }
+    }
 }
 
 @Composable
