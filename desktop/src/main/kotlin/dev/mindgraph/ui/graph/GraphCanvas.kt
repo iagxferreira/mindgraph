@@ -14,6 +14,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
@@ -21,42 +23,55 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.sp
-import dev.mindgraph.model.Link
-import dev.mindgraph.model.Note
+import dev.mindgraph.model.Edge
+import dev.mindgraph.model.EdgeKind
+import dev.mindgraph.model.Node
+import dev.mindgraph.model.NodeId
+import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.GraphLayoutEngine
+import dev.mindgraph.state.TaskGraph
 import dev.mindgraph.state.Vec2
 import dev.mindgraph.ui.theme.Accent
 import dev.mindgraph.ui.theme.AccentSoft
+import dev.mindgraph.ui.theme.Blocked
+import dev.mindgraph.ui.theme.Done
 import dev.mindgraph.ui.theme.Ink
 import dev.mindgraph.ui.theme.TextPrimary
 import kotlinx.coroutines.delay
 import kotlin.math.min
 
 /**
- * Renders notes as nodes and links as edges on a pannable/zoomable canvas. Node radius
- * encodes cumulative tracked time for that note — the visual that turns the graph into a
- * picture of where study time actually went.
+ * Notes and tasks as one graph. Radius encodes tracked time; color encodes task state, with
+ * blocked nodes dashed — so "where did time go" and "what can I start" read off the same picture.
  */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
 fun GraphCanvas(
-    notes: List<Note>,
-    links: List<Link>,
+    nodes: List<Node>,
+    edges: List<Edge>,
+    graph: TaskGraph,
     layout: GraphLayoutEngine,
-    selectedNoteId: Long?,
-    linkSourceId: Long?,
-    trackedSecondsForNote: (Long) -> Long,
-    onSelectNote: (Long) -> Unit,
-    onLinkTarget: (Long) -> Unit,
+    selectedNodeId: NodeId?,
+    linkSourceId: NodeId?,
+    viewResetKey: Int,
+    trackedSecondsFor: (NodeId) -> Long,
+    onSelectNode: (NodeId) -> Unit,
+    onLinkTarget: (NodeId) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     var pan by remember { mutableStateOf(Offset.Zero) }
     var zoom by remember { mutableStateOf(1f) }
     val textMeasurer = rememberTextMeasurer()
-    val noteIds = remember(notes) { notes.map { it.id } }
+    val nodeIds = remember(nodes) { nodes.map { it.id.value } }
 
-    LaunchedEffect(noteIds, links) {
+    LaunchedEffect(viewResetKey) {
+        pan = Offset.Zero
+        zoom = 1f
+    }
+
+    LaunchedEffect(nodeIds, edges, layout.mode) {
         while (true) {
             layout.step()
             delay(16)
@@ -67,34 +82,43 @@ fun GraphCanvas(
         modifier = modifier
             .fillMaxSize()
             .background(Ink)
-            .pointerInput(Unit) {
-                detectDragGestures { change, dragAmount ->
+            .pointerInput(nodeIds) {
+                var draggedId: String? = null
+                detectDragGestures(
+                    onDragStart = { startOffset ->
+                        draggedId = hitTest(nodeIds, layout, trackedSecondsFor, pan, zoom, startOffset, size)
+                        draggedId?.let { layout.setPinned(it, true) }
+                    },
+                    onDragEnd = { draggedId = null },
+                    onDragCancel = { draggedId = null },
+                ) { change, dragAmount ->
                     change.consume()
-                    pan += dragAmount
+                    val id = draggedId
+                    val current = id?.let { layout.positions[it] }
+                    if (id != null && current != null) {
+                        layout.positions[id] = current + Vec2(dragAmount.x / zoom, dragAmount.y / zoom)
+                    } else {
+                        pan += dragAmount
+                    }
                 }
             }
             .onPointerEvent(PointerEventType.Scroll) { event ->
                 val delta = event.changes.firstOrNull()?.scrollDelta?.y ?: return@onPointerEvent
                 zoom = (zoom * (1f - delta * 0.08f)).coerceIn(0.3f, 3f)
             }
-            .pointerInput(noteIds, linkSourceId) {
-                detectTapGestures { tapOffset ->
-                    val centerX = size.width / 2f + pan.x
-                    val centerY = size.height / 2f + pan.y
-                    val hit = noteIds.minByOrNull { id ->
-                        val p = layout.positions[id] ?: return@minByOrNull Float.MAX_VALUE
-                        val dx = (centerX + p.x * zoom) - tapOffset.x
-                        val dy = (centerY + p.y * zoom) - tapOffset.y
-                        dx * dx + dy * dy
-                    } ?: return@detectTapGestures
-                    val p = layout.positions[hit] ?: return@detectTapGestures
-                    val dx = (centerX + p.x * zoom) - tapOffset.x
-                    val dy = (centerY + p.y * zoom) - tapOffset.y
-                    val radius = nodeRadius(trackedSecondsForNote(hit)) * zoom
-                    if (dx * dx + dy * dy <= radius * radius * 4f) {
-                        if (linkSourceId != null) onLinkTarget(hit) else onSelectNote(hit)
-                    }
-                }
+            .pointerInput(nodeIds, linkSourceId) {
+                detectTapGestures(
+                    onTap = { tapOffset ->
+                        val hit = hitTest(nodeIds, layout, trackedSecondsFor, pan, zoom, tapOffset, size)
+                            ?: return@detectTapGestures
+                        if (linkSourceId != null) onLinkTarget(NodeId(hit)) else onSelectNode(NodeId(hit))
+                    },
+                    onDoubleTap = { tapOffset ->
+                        val hit = hitTest(nodeIds, layout, trackedSecondsFor, pan, zoom, tapOffset, size)
+                            ?: return@detectTapGestures
+                        layout.setPinned(hit, false)
+                    },
+                )
             },
     ) {
         val centerX = size.width / 2f + pan.x
@@ -102,33 +126,50 @@ fun GraphCanvas(
 
         fun toScreen(p: Vec2): Offset = Offset(centerX + p.x * zoom, centerY + p.y * zoom)
 
-        for (link in links) {
-            val from = layout.positions[link.sourceNoteId] ?: continue
-            val to = layout.positions[link.targetNoteId] ?: continue
-            drawLine(color = AccentSoft, start = toScreen(from), end = toScreen(to), strokeWidth = 1.6f)
+        for (edge in edges) {
+            val from = layout.positions[edge.sourceId.value] ?: continue
+            val to = layout.positions[edge.targetId.value] ?: continue
+            val isDependency = edge.kind == EdgeKind.DependsOn
+            drawLine(
+                color = if (isDependency) Accent.copy(alpha = 0.55f) else AccentSoft,
+                start = toScreen(from),
+                end = toScreen(to),
+                strokeWidth = if (isDependency) 2.2f else 1.6f,
+                pathEffect = if (isDependency) null else PathEffect.dashPathEffect(floatArrayOf(5f, 5f)),
+            )
         }
 
-        for (note in notes) {
-            val pos = layout.positions[note.id] ?: continue
+        for (node in nodes) {
+            val pos = layout.positions[node.id.value] ?: continue
             val screen = toScreen(pos)
-            val radius = nodeRadius(trackedSecondsForNote(note.id)) * zoom
-            val isSelected = note.id == selectedNoteId
-            val isLinkSource = note.id == linkSourceId
+            val radius = nodeRadius(trackedSecondsFor(node.id)) * zoom
+            val isSelected = node.id == selectedNodeId
+            val isLinkSource = node.id == linkSourceId
+            val emphasized = isSelected || isLinkSource
+            val blocked = node.isTask && graph.isBlocked(node.id)
+            val hue = nodeHue(node, blocked)
 
             drawCircle(
-                color = Accent.copy(alpha = if (isSelected || isLinkSource) 0.4f else 0.18f),
+                color = hue.copy(alpha = if (emphasized) 0.42f else 0.16f),
                 radius = radius,
                 center = screen,
             )
             drawCircle(
-                color = if (isSelected || isLinkSource) Accent else AccentSoft,
+                color = if (emphasized) hue else hue.copy(alpha = 0.7f),
                 radius = radius,
                 center = screen,
-                style = Stroke(width = if (isSelected || isLinkSource) 3f else 1.4f),
+                style = Stroke(
+                    width = if (emphasized) 3f else 1.6f,
+                    pathEffect = when {
+                        blocked -> PathEffect.dashPathEffect(floatArrayOf(6f, 4f))
+                        layout.isPinned(node.id.value) -> PathEffect.dashPathEffect(floatArrayOf(2f, 3f))
+                        else -> null
+                    },
+                ),
             )
 
             val label = textMeasurer.measure(
-                text = note.title,
+                text = node.title,
                 style = TextStyle(color = TextPrimary, fontSize = 12.sp),
             )
             drawText(
@@ -139,7 +180,38 @@ fun GraphCanvas(
     }
 }
 
+private fun nodeHue(node: Node, blocked: Boolean): Color = when {
+    blocked -> Blocked
+    node.task?.status == TaskStatus.Done -> Done
+    else -> Accent
+}
+
 private fun nodeRadius(trackedSeconds: Long): Float {
     val minutes = trackedSeconds / 60f
     return 18f + min(minutes, 180f) * 0.35f
+}
+
+/** Finds the node whose circle contains [point], in screen space. */
+private fun hitTest(
+    nodeIds: List<String>,
+    layout: GraphLayoutEngine,
+    trackedSecondsFor: (NodeId) -> Long,
+    pan: Offset,
+    zoom: Float,
+    point: Offset,
+    canvasSize: IntSize,
+): String? {
+    val centerX = canvasSize.width / 2f + pan.x
+    val centerY = canvasSize.height / 2f + pan.y
+    val hit = nodeIds.minByOrNull { id ->
+        val p = layout.positions[id] ?: return@minByOrNull Float.MAX_VALUE
+        val dx = (centerX + p.x * zoom) - point.x
+        val dy = (centerY + p.y * zoom) - point.y
+        dx * dx + dy * dy
+    } ?: return null
+    val p = layout.positions[hit] ?: return null
+    val dx = (centerX + p.x * zoom) - point.x
+    val dy = (centerY + p.y * zoom) - point.y
+    val radius = nodeRadius(trackedSecondsFor(NodeId(hit))) * zoom
+    return if (dx * dx + dy * dy <= radius * radius * 4f) hit else null
 }

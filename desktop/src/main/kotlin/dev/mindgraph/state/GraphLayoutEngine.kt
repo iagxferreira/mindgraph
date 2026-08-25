@@ -1,7 +1,7 @@
 package dev.mindgraph.state
 
 import androidx.compose.runtime.mutableStateMapOf
-import dev.mindgraph.model.Link
+import dev.mindgraph.model.Edge
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -14,23 +14,46 @@ data class Vec2(val x: Float, val y: Float) {
 }
 
 /**
- * A small force-directed layout: nodes repel each other, edges act as springs pulling
- * linked notes together, and everything is pulled gently toward the center. Run [step]
- * on a timer while the graph is visible; positions live in a Compose snapshot map so
- * the canvas redraws automatically as they move.
+ * Mind mode is a force-directed layout for associative thinking; Flow mode is a layered
+ * left-to-right layout for dependencies. They are separate because springs actively scramble
+ * the ordering a dependency graph exists to show.
  */
-class GraphLayoutEngine {
-    val positions = mutableStateMapOf<Long, Vec2>()
-    private val velocities = HashMap<Long, Vec2>()
-    private val random = Random(42)
-    private var nodeIds: List<Long> = emptyList()
-    private var links: List<Link> = emptyList()
+enum class LayoutMode { Mind, Flow }
 
-    fun sync(noteIds: List<Long>, links: List<Link>) {
-        val idSet = noteIds.toSet()
+class GraphLayoutEngine {
+    val positions = mutableStateMapOf<String, Vec2>()
+    private val velocities = HashMap<String, Vec2>()
+    private val pinned = HashSet<String>()
+    private val flowTargets = HashMap<String, Vec2>()
+    private val random = Random(42)
+    private var nodeIds: List<String> = emptyList()
+    private var edges: List<Edge> = emptyList()
+
+    var mode: LayoutMode = LayoutMode.Mind
+
+    fun isPinned(id: String): Boolean = id in pinned
+
+    /** Pinned nodes keep their position through [step] — drag sets this, double-click clears it. */
+    fun setPinned(id: String, isPinned: Boolean) {
+        if (isPinned) {
+            pinned.add(id)
+            velocities[id] = Vec2(0f, 0f)
+        } else {
+            pinned.remove(id)
+        }
+    }
+
+    fun unpinAll() {
+        pinned.clear()
+    }
+
+    fun sync(ids: List<String>, edges: List<Edge>) {
+        val idSet = ids.toSet()
         positions.keys.retainAll(idSet)
         velocities.keys.retainAll(idSet)
-        for (id in noteIds) {
+        pinned.retainAll(idSet)
+        flowTargets.keys.retainAll(idSet)
+        for (id in ids) {
             if (id !in positions) {
                 val angle = random.nextDouble(0.0, 2 * Math.PI)
                 val radius = 80.0 + random.nextDouble(0.0, 140.0)
@@ -38,11 +61,52 @@ class GraphLayoutEngine {
                 velocities[id] = Vec2(0f, 0f)
             }
         }
-        nodeIds = noteIds
-        this.links = links
+        nodeIds = ids
+        this.edges = edges
+    }
+
+    /**
+     * Places each node in the column matching its dependency depth, stacked within the column.
+     * Positions ease toward these targets in [step] so switching modes reads as a movement
+     * rather than a cut.
+     */
+    fun setFlowRanks(ranks: Map<String, Int>) {
+        flowTargets.clear()
+        if (ranks.isEmpty()) return
+
+        val columnWidth = 260f
+        val rowHeight = 96f
+        val byRank = ranks.entries.groupBy({ it.value }, { it.key })
+        val maxRank = byRank.keys.maxOrNull() ?: 0
+
+        byRank.forEach { (rank, idsInRank) ->
+            val ordered = idsInRank.sorted()
+            ordered.forEachIndexed { index, id ->
+                val x = (rank - maxRank / 2f) * columnWidth
+                val y = (index - (ordered.size - 1) / 2f) * rowHeight
+                flowTargets[id] = Vec2(x, y)
+            }
+        }
     }
 
     fun step() {
+        when (mode) {
+            LayoutMode.Mind -> stepForces()
+            LayoutMode.Flow -> stepTowardFlowTargets()
+        }
+    }
+
+    private fun stepTowardFlowTargets() {
+        val easing = 0.18f
+        for (id in nodeIds) {
+            if (id in pinned) continue
+            val target = flowTargets[id] ?: continue
+            val current = positions[id] ?: continue
+            positions[id] = current + (target - current) * easing
+        }
+    }
+
+    private fun stepForces() {
         val ids = nodeIds
         if (ids.size < 2) return
 
@@ -52,7 +116,7 @@ class GraphLayoutEngine {
         val damping = 0.82f
         val centerPull = 0.0015f
 
-        val forces = HashMap<Long, Vec2>(ids.size)
+        val forces = HashMap<String, Vec2>(ids.size)
         for (id in ids) forces[id] = Vec2(0f, 0f)
 
         for (i in ids.indices) {
@@ -73,20 +137,23 @@ class GraphLayoutEngine {
             }
         }
 
-        for (link in links) {
-            val pa = positions[link.sourceNoteId] ?: continue
-            val pb = positions[link.targetNoteId] ?: continue
+        for (edge in edges) {
+            val source = edge.sourceId.value
+            val target = edge.targetId.value
+            val pa = positions[source] ?: continue
+            val pb = positions[target] ?: continue
             val dx = pb.x - pa.x
             val dy = pb.y - pa.y
             val dist = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
             val force = (dist - springLength) * springStrength
             val fx = dx / dist * force
             val fy = dy / dist * force
-            forces[link.sourceNoteId] = (forces[link.sourceNoteId] ?: Vec2(0f, 0f)) + Vec2(fx, fy)
-            forces[link.targetNoteId] = (forces[link.targetNoteId] ?: Vec2(0f, 0f)) - Vec2(fx, fy)
+            forces[source] = (forces[source] ?: Vec2(0f, 0f)) + Vec2(fx, fy)
+            forces[target] = (forces[target] ?: Vec2(0f, 0f)) - Vec2(fx, fy)
         }
 
         for (id in ids) {
+            if (id in pinned) continue
             val pos = positions[id] ?: continue
             val pull = pos * -centerPull
             val vel = ((velocities[id] ?: Vec2(0f, 0f)) + (forces[id] ?: Vec2(0f, 0f)) + pull) * damping
