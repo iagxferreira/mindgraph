@@ -1,5 +1,10 @@
 package dev.mindgraph.model
 
+import java.time.Instant
+import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZoneId
+
 /**
  * The single entity in the graph. A node is always a markdown document; it is *also* a task
  * when [task] is non-null. That optionality is the whole model: a stray thought and a piece
@@ -48,7 +53,23 @@ data class TaskFacet(
     val status: TaskStatus,
     val due: String? = null,
     val completedAt: String? = null,
-)
+) {
+    /**
+     * The deadline as a date, or null if there isn't one that parses. It is stored as text
+     * because frontmatter is text and a person may type anything there; a date nobody can read
+     * is treated as no deadline rather than as an error, so a typo costs ordering, not the task.
+     *
+     * Accepts a plain `2026-09-04` and the timestamps the app writes elsewhere.
+     */
+    val dueDate: LocalDate?
+        get() {
+            val raw = due?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+            return runCatching { LocalDate.parse(raw) }.getOrNull()
+                ?: runCatching { OffsetDateTime.parse(raw).toLocalDate() }.getOrNull()
+                ?: runCatching { Instant.parse(raw).atZone(ZoneId.systemDefault()).toLocalDate() }
+                    .getOrNull()
+        }
+}
 
 enum class TaskStatus {
     Todo, Doing, Done, Dropped;
