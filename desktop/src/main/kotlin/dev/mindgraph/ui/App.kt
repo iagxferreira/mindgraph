@@ -26,6 +26,7 @@ import dev.mindgraph.mcp.mindGraphTools
 import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
+import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.AppViewModel
 import dev.mindgraph.state.LinkOutcome
 import dev.mindgraph.storage.NodeStore
@@ -77,6 +78,9 @@ fun App() {
                             targetId: NodeId,
                             kind: EdgeKind,
                         ): LinkOutcome = model.linkNow(sourceId, targetId, kind)
+
+                        override suspend fun setStatus(nodeId: NodeId, status: TaskStatus): Node? =
+                            model.setStatusNow(nodeId, status)
                     }
                     val server = McpHttpServer(McpDispatcher(mindGraphTools(vault)))
                     if (server.start()) {

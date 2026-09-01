@@ -76,7 +76,7 @@ class McpDispatcherTest {
         val tools = dispatcher.handle(request(1, "tools/list"))!!["result"]!!.jsonObject["tools"]!!.jsonArray
 
         assertEquals(
-            listOf("create_task", "link_nodes"),
+            listOf("list_ready_tasks", "create_task", "link_nodes", "update_status"),
             tools.map { it.jsonObject["name"]!!.jsonPrimitive.content },
         )
 
