@@ -77,13 +77,21 @@ class AppViewModel(
     // ---- authoring ----
 
     fun createNode(title: String = "Untitled", body: String = "", asTask: Boolean = false) {
-        scope.launch {
-            val facet = if (asTask) TaskFacet(status = TaskStatus.Todo) else null
-            val created = store.create(title.trim().ifBlank { "Untitled" }, body, facet)
-            refresh()
-            selectedNodeId = created.id
-            statusMessage = if (asTask) "Task created" else "Note created"
-        }
+        scope.launch { createNodeNow(title, body, asTask) }
+    }
+
+    /**
+     * The same creation the UI performs, but suspending and returning what it made. Agents
+     * calling in over MCP need the id back, and routing them through here — rather than at the
+     * store — is what makes a task an agent created appear on the graph without a reload.
+     */
+    suspend fun createNodeNow(title: String, body: String = "", asTask: Boolean = false): Node {
+        val facet = if (asTask) TaskFacet(status = TaskStatus.Todo) else null
+        val created = store.create(title.trim().ifBlank { "Untitled" }, body, facet)
+        refresh()
+        selectedNodeId = created.id
+        statusMessage = if (asTask) "Task created" else "Note created"
+        return created
     }
 
     /**
