@@ -3,6 +3,7 @@ package dev.mindgraph.state
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.TaskStatus
+import java.time.LocalDate
 
 /**
  * Derived task state. Status is what you declared; readiness is what the graph computes —
@@ -11,6 +12,13 @@ import dev.mindgraph.model.TaskStatus
  */
 class TaskGraph(private val nodes: List<Node>) {
     private val byId: Map<NodeId, Node> = nodes.associateBy { it.id }
+
+    private companion object {
+        const val SOON_DAYS = 3L
+        const val OVERDUE = 0
+        const val DUE_SOON = 1
+        const val NOT_URGENT = 2
+    }
 
     fun dependencies(nodeId: NodeId): List<Node> =
         byId[nodeId]?.dependsOn?.mapNotNull(byId::get).orEmpty()
@@ -28,6 +36,35 @@ class TaskGraph(private val nodes: List<Node>) {
         node.task?.status == TaskStatus.Todo && !isBlocked(node.id)
 
     fun readyTasks(): List<Node> = nodes.filter(::isReady)
+
+    /**
+     * Ready work in the order it is worth doing.
+     *
+     * Deadlines come first because they are the one claim on your time that someone else may
+     * be holding you to, and because a date decays on its own — unlike a declared priority,
+     * which only ever inflates. Leverage decides everything after that: with nothing due, the
+     * task that frees the most work is the one worth starting.
+     *
+     * Without this, tasks that unblock nothing tie and fall back on their titles, so ordering
+     * comes down to spelling.
+     */
+    fun rankedReadyTasks(today: LocalDate = LocalDate.now()): List<Node> =
+        readyTasks().sortedWith(
+            compareBy<Node> { urgency(it, today) }
+                .thenByDescending { unblockedCount(it.id) }
+                .thenBy { it.task?.dueDate ?: LocalDate.MAX }
+                .thenBy { it.title },
+        )
+
+    /** 0 overdue, 1 due within [SOON_DAYS], 2 everything else. */
+    private fun urgency(node: Node, today: LocalDate): Int {
+        val due = node.task?.dueDate ?: return NOT_URGENT
+        return when {
+            due.isBefore(today) -> OVERDUE
+            !due.isAfter(today.plusDays(SOON_DAYS)) -> DUE_SOON
+            else -> NOT_URGENT
+        }
+    }
 
     /**
      * How much becomes startable if this node is finished — every task reachable downstream.
