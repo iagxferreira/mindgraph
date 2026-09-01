@@ -21,11 +21,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import dev.mindgraph.mcp.McpDispatcher
 import dev.mindgraph.mcp.McpHttpServer
-import dev.mindgraph.mcp.TaskCreator
+import dev.mindgraph.mcp.VaultAccess
 import dev.mindgraph.mcp.mindGraphTools
+import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
 import dev.mindgraph.state.AppViewModel
+import dev.mindgraph.state.LinkOutcome
 import dev.mindgraph.storage.NodeStore
 import dev.mindgraph.storage.SessionLog
 import dev.mindgraph.storage.Vault
@@ -64,11 +66,19 @@ fun App() {
             // not just on disk.
             if (model != null) {
                 DisposableEffect(model) {
-                    val creator = object : TaskCreator {
-                        override suspend fun create(title: String, body: String): Node =
+                    val vault = object : VaultAccess {
+                        override suspend fun createTask(title: String, body: String): Node =
                             model.createNodeNow(title, body, asTask = true)
+
+                        override suspend fun nodes(): List<Node> = model.nodes
+
+                        override suspend fun link(
+                            sourceId: NodeId,
+                            targetId: NodeId,
+                            kind: EdgeKind,
+                        ): LinkOutcome = model.linkNow(sourceId, targetId, kind)
                     }
-                    val server = McpHttpServer(McpDispatcher(mindGraphTools(creator)))
+                    val server = McpHttpServer(McpDispatcher(mindGraphTools(vault)))
                     if (server.start()) {
                         println("MindGraph: MCP server listening on ${server.endpoint}")
                     }
