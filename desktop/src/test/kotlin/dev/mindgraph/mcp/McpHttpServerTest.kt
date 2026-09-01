@@ -115,7 +115,7 @@ class McpHttpServerTest {
         val tools = Json.parseToJsonElement(response.body())
             .jsonObject["result"]!!.jsonObject["tools"]!!.jsonArray
         assertEquals(
-            listOf("create_task", "link_nodes"),
+            listOf("list_ready_tasks", "create_task", "link_nodes", "update_status"),
             tools.map { it.jsonObject["name"]!!.jsonPrimitive.content },
         )
     }

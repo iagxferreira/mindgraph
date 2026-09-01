@@ -20,6 +20,12 @@ class StoreVault(private val store: NodeStore) : VaultAccess {
 
     override suspend fun nodes(): List<Node> = store.load()
 
+    override suspend fun setStatus(nodeId: NodeId, status: TaskStatus): Node? {
+        val node = store.load().find { it.id == nodeId } ?: return null
+        val facet = node.task ?: TaskFacet(status = status)
+        return store.save(node.copy(task = facet.copy(status = status)))
+    }
+
     override suspend fun link(
         sourceId: NodeId,
         targetId: NodeId,

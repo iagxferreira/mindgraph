@@ -3,7 +3,9 @@ package dev.mindgraph.mcp
 import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
+import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.LinkOutcome
+import dev.mindgraph.state.TaskGraph
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
@@ -35,12 +37,15 @@ interface VaultAccess {
     suspend fun createTask(title: String, body: String): Node
     suspend fun nodes(): List<Node>
     suspend fun link(sourceId: NodeId, targetId: NodeId, kind: EdgeKind): LinkOutcome
+    suspend fun setStatus(nodeId: NodeId, status: TaskStatus): Node?
 }
 
 /** The tools MindGraph exposes to agents. */
 fun mindGraphTools(vault: VaultAccess): List<McpTool> = listOf(
+    listReadyTasksTool(vault),
     createTaskTool(vault),
     linkNodesTool(vault),
+    updateStatusTool(vault),
 )
 
 private fun createTaskTool(vault: VaultAccess) = McpTool(
@@ -144,8 +149,117 @@ private fun linkNodesTool(vault: VaultAccess) = McpTool(
     }
 }
 
+private fun listReadyTasksTool(vault: VaultAccess) = McpTool(
+    name = "list_ready_tasks",
+    description =
+        "List the tasks in the user's MindGraph vault that can actually be started now — open " +
+            "tasks whose dependencies are all finished. Readiness is computed from the graph, " +
+            "not declared, so this is the right question to ask before picking up work. " +
+            "Results are ranked by how much finishing each one unblocks.",
+    schema = buildJsonObject {
+        put("type", "object")
+        putJsonObject("properties") {
+            putJsonObject("limit") {
+                put("type", "integer")
+                put("description", "How many to return. Defaults to 10.")
+            }
+        }
+        putJsonArray("required") {}
+        put("additionalProperties", false)
+    },
+) { arguments ->
+    val limit = arguments["limit"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()?.coerceIn(1, 100)
+        ?: DEFAULT_LIMIT
+
+    runBlocking {
+        val nodes = vault.nodes()
+        val graph = TaskGraph(nodes)
+        val ready = graph.readyTasks()
+            .sortedWith(compareByDescending<Node> { graph.unblockedCount(it.id) }.thenBy { it.title })
+        val blocked = nodes.count { it.task?.status?.isOpen == true && graph.isBlocked(it.id) }
+
+        if (ready.isEmpty()) {
+            if (blocked == 0) {
+                "No open tasks."
+            } else {
+                "Nothing is ready: all $blocked open tasks are blocked by unfinished dependencies."
+            }
+        } else {
+            buildString {
+                append("${ready.size} task(s) ready")
+                if (blocked > 0) append(", $blocked blocked")
+                append(":\n")
+                ready.take(limit).forEach { node ->
+                    val unblocks = graph.unblockedCount(node.id)
+                    append("- ${node.title} (${node.id.value})")
+                    if (unblocks > 0) append(" — finishing it unblocks $unblocks")
+                    append("\n")
+                }
+            }.trimEnd()
+        }
+    }
+}
+
+private fun updateStatusTool(vault: VaultAccess) = McpTool(
+    name = "update_status",
+    description =
+        "Set the status of a task in the user's MindGraph vault: todo, doing, done, or " +
+            "dropped. Use this to close work out when it is finished. Reports which tasks the " +
+            "change unblocked, since finishing one task can make several others startable. " +
+            "A plain note given a status becomes a task.",
+    schema = buildJsonObject {
+        put("type", "object")
+        putJsonObject("properties") {
+            putJsonObject("node") {
+                put("type", "string")
+                put("description", "The task: its id, or its exact title.")
+            }
+            putJsonObject("status") {
+                put("type", "string")
+                putJsonArray("enum") { STATUSES.forEach { add(it) } }
+                put("description", "'done' and 'dropped' both close the task and unblock its dependents.")
+            }
+        }
+        putJsonArray("required") { add("node"); add("status") }
+        put("additionalProperties", false)
+    },
+) { arguments ->
+    val reference = arguments.requiredString("node")
+    val raw = arguments.requiredString("status")
+    val status = TaskStatus.parse(raw)
+        ?: throw IllegalArgumentException(
+            "status must be one of ${STATUSES.joinToString(", ")}, not \"$raw\".",
+        )
+
+    runBlocking {
+        val before = vault.nodes()
+        val node = resolve(before, reference)
+        val readyBefore = TaskGraph(before).readyTasks().map { it.id }.toSet()
+
+        val saved = vault.setStatus(node.id, status)
+            ?: throw IllegalStateException("Refused: \"${node.title}\" no longer exists.")
+
+        // What the change freed up. This is the whole reason the edges are worth storing, so
+        // the agent that closed the task is told directly rather than having to ask again.
+        val after = vault.nodes()
+        val freed = TaskGraph(after).readyTasks()
+            .filter { it.id !in readyBefore && it.id != saved.id }
+
+        buildString {
+            append("\"${saved.title}\" is now ${status.name.lowercase()}.")
+            if (freed.isNotEmpty()) {
+                append(" That unblocked ${freed.size} task(s): ")
+                append(freed.joinToString(", ") { "\"${it.title}\" (${it.id.value})" })
+                append(".")
+            }
+        }
+    }
+}
+
 private const val DEPENDS_ON = "depends_on"
 private const val RELATES_TO = "relates_to"
+private const val DEFAULT_LIMIT = 10
+private val STATUSES = TaskStatus.entries.map { it.name.lowercase() }
 
 private fun JsonObject.requiredString(key: String): String {
     val value = this[key]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
