@@ -9,6 +9,7 @@ data class Node(
     val id: NodeId,
     val title: String,
     val body: String,
+    val kind: NodeKind = NodeKind.Note,
     val task: TaskFacet? = null,
     val dependsOn: List<NodeId> = emptyList(),
     val relatesTo: List<NodeId> = emptyList(),
@@ -18,6 +19,23 @@ data class Node(
     val slug: String,
 ) {
     val isTask: Boolean get() = task != null
+}
+
+/**
+ * What a document *is*. Deliberately not a list that includes "task": whether a node is work
+ * is [task], and keeping the two axes separate is what lets an RFC also be a task you are
+ * tracking, rather than forcing a choice between describing it and scheduling it.
+ */
+enum class NodeKind {
+    Note, Rfc, Reference;
+
+    /** How the kind appears in frontmatter. */
+    val slug: String get() = name.lowercase()
+
+    companion object {
+        fun parse(raw: String?): NodeKind? =
+            entries.find { it.slug.equals(raw?.trim(), ignoreCase = true) }
+    }
 }
 
 /** A ULID. Opaque and stable — the filename may change freely, this may not. */
