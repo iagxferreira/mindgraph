@@ -146,20 +146,27 @@ class AppViewModel(
     }
 
     fun setStatus(nodeId: NodeId, status: TaskStatus) {
-        scope.launch {
-            val node = nodeById(nodeId) ?: return@launch
-            val facet = node.task ?: TaskFacet(status = status)
-            store.save(
-                node.copy(
-                    task = facet.copy(
-                        status = status,
-                        completedAt = if (status == TaskStatus.Done) Instant.now().toString() else null,
-                    ),
+        scope.launch { setStatusNow(nodeId, status) }
+    }
+
+    /**
+     * Sets a status and hands back the node as saved. A note given a status becomes a task —
+     * the facet is the only thing that distinguishes them, so there is nothing else to do.
+     */
+    suspend fun setStatusNow(nodeId: NodeId, status: TaskStatus): Node? {
+        val node = nodeById(nodeId) ?: return null
+        val facet = node.task ?: TaskFacet(status = status)
+        val saved = store.save(
+            node.copy(
+                task = facet.copy(
+                    status = status,
+                    completedAt = if (status == TaskStatus.Done) Instant.now().toString() else null,
                 ),
-            )
-            refresh()
-            statusMessage = "Marked ${status.name.lowercase()}"
-        }
+            ),
+        )
+        refresh()
+        statusMessage = "Marked ${status.name.lowercase()}"
+        return saved
     }
 
     // ---- edges ----
