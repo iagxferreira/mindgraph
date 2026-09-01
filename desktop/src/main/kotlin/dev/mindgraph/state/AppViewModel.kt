@@ -4,6 +4,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import dev.mindgraph.model.Edge
+import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.TaskFacet
@@ -164,28 +165,34 @@ class AppViewModel(
     // ---- edges ----
 
     fun linkRelates(sourceId: NodeId, targetId: NodeId) {
-        scope.launch {
-            val source = nodeById(sourceId) ?: return@launch
-            if (sourceId == targetId || targetId in source.relatesTo) return@launch
-            store.save(source.copy(relatesTo = source.relatesTo + targetId))
-            refresh()
-            statusMessage = "Linked"
-        }
+        scope.launch { linkNow(sourceId, targetId, EdgeKind.RelatesTo) }
     }
 
     /** Refuses edges that would close a dependency cycle, and says so rather than failing quietly. */
     fun linkDependsOn(sourceId: NodeId, targetId: NodeId) {
-        scope.launch {
-            val source = nodeById(sourceId) ?: return@launch
-            if (targetId in source.dependsOn) return@launch
-            if (graph.wouldCycle(sourceId, targetId)) {
-                statusMessage = "That would create a dependency cycle"
-                return@launch
-            }
-            store.save(source.copy(dependsOn = source.dependsOn + targetId))
+        scope.launch { linkNow(sourceId, targetId, EdgeKind.DependsOn) }
+    }
+
+    /**
+     * Adds an edge and reports what happened. The decision lives in [Linking] so an agent
+     * calling in over MCP cannot build a graph this app would have refused.
+     */
+    suspend fun linkNow(sourceId: NodeId, targetId: NodeId, kind: EdgeKind): LinkOutcome {
+        val outcome = Linking.evaluate(nodes, sourceId, targetId, kind)
+        if (outcome == LinkOutcome.Linked) {
+            val source = nodeById(sourceId) ?: return LinkOutcome.UnknownNode
+            store.save(Linking.applied(source, targetId, kind))
             refresh()
-            statusMessage = "Dependency added"
         }
+        statusMessage = when (outcome) {
+            LinkOutcome.Linked ->
+                if (kind == EdgeKind.DependsOn) "Dependency added" else "Linked"
+            LinkOutcome.AlreadyLinked -> "Already linked"
+            LinkOutcome.WouldCycle -> "That would create a dependency cycle"
+            LinkOutcome.SelfLink -> "A node cannot link to itself"
+            LinkOutcome.UnknownNode -> "That node no longer exists"
+        }
+        return outcome
     }
 
     fun unlink(sourceId: NodeId, targetId: NodeId) {
