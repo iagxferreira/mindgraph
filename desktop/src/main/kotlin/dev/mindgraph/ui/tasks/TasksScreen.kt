@@ -50,8 +50,7 @@ fun TasksScreen(
     val tasks = viewModel.nodes.filter { it.isTask }
 
     val doing = tasks.filter { it.task?.status == TaskStatus.Doing }
-    val ready = tasks.filter { graph.isReady(it) }
-        .sortedByDescending { graph.unblockedCount(it.id) }
+    val ready = graph.rankedReadyTasks()
     val blocked = tasks.filter { it.task?.status?.isOpen == true && graph.isBlocked(it.id) }
     val finished = tasks.filter { it.task?.status == TaskStatus.Done }
 
