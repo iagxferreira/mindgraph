@@ -1,8 +1,5 @@
 package dev.mindgraph.mcp
 
-import dev.mindgraph.model.Node
-import dev.mindgraph.model.TaskFacet
-import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.storage.NodeStore
 import dev.mindgraph.storage.Vault
 import java.net.URI
@@ -35,11 +32,7 @@ class McpHttpServerTest {
     /** Port 0 so the test never collides with a real MindGraph running on the machine. */
     private fun startServer(): McpHttpServer {
         store = NodeStore(Vault(Files.createTempDirectory("mindgraph-mcp-http")))
-        val creator = object : TaskCreator {
-            override suspend fun create(title: String, body: String): Node =
-                store.create(title, body, TaskFacet(TaskStatus.Todo))
-        }
-        val started = McpHttpServer(McpDispatcher(mindGraphTools(creator)), port = 0)
+        val started = McpHttpServer(McpDispatcher(mindGraphTools(StoreVault(store))), port = 0)
         assertTrue(started.start(), "server failed to start")
         server = started
         return started
@@ -121,7 +114,10 @@ class McpHttpServerTest {
         assertEquals(200, response.statusCode())
         val tools = Json.parseToJsonElement(response.body())
             .jsonObject["result"]!!.jsonObject["tools"]!!.jsonArray
-        assertEquals("create_task", tools.single().jsonObject["name"]!!.jsonPrimitive.content)
+        assertEquals(
+            listOf("create_task", "link_nodes"),
+            tools.map { it.jsonObject["name"]!!.jsonPrimitive.content },
+        )
     }
 
     @Test

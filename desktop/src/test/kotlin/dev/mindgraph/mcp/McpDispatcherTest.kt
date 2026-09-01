@@ -1,6 +1,5 @@
 package dev.mindgraph.mcp
 
-import dev.mindgraph.model.Node
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.storage.NodeStore
 import dev.mindgraph.storage.Vault
@@ -23,11 +22,7 @@ class McpDispatcherTest {
 
     private fun newFixture(): Pair<McpDispatcher, NodeStore> {
         val store = NodeStore(Vault(Files.createTempDirectory("mindgraph-mcp")))
-        val creator = object : TaskCreator {
-            override suspend fun create(title: String, body: String): Node =
-                store.create(title, body, dev.mindgraph.model.TaskFacet(TaskStatus.Todo))
-        }
-        return McpDispatcher(mindGraphTools(creator)) to store
+        return McpDispatcher(mindGraphTools(StoreVault(store))) to store
     }
 
     private fun request(id: Int, method: String, params: JsonObject? = null): JsonObject =
@@ -80,8 +75,14 @@ class McpDispatcherTest {
 
         val tools = dispatcher.handle(request(1, "tools/list"))!!["result"]!!.jsonObject["tools"]!!.jsonArray
 
-        val tool = tools.single().jsonObject
-        assertEquals("create_task", tool["name"]!!.jsonPrimitive.content)
+        assertEquals(
+            listOf("create_task", "link_nodes"),
+            tools.map { it.jsonObject["name"]!!.jsonPrimitive.content },
+        )
+
+        val tool = tools.first {
+            it.jsonObject["name"]!!.jsonPrimitive.content == "create_task"
+        }.jsonObject
         val schema = tool["inputSchema"]!!.jsonObject
         assertEquals("object", schema["type"]!!.jsonPrimitive.content)
         assertNotNull(schema["properties"]!!.jsonObject["title"])
