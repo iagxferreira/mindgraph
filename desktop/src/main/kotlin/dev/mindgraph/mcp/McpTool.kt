@@ -6,6 +6,7 @@ import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.LinkOutcome
 import dev.mindgraph.state.TaskGraph
+import java.time.LocalDate
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
@@ -34,10 +35,10 @@ class McpTool(
  * without standing up Compose.
  */
 interface VaultAccess {
-    suspend fun createTask(title: String, body: String): Node
+    suspend fun createTask(title: String, body: String, due: String?): Node
     suspend fun nodes(): List<Node>
     suspend fun link(sourceId: NodeId, targetId: NodeId, kind: EdgeKind): LinkOutcome
-    suspend fun setStatus(nodeId: NodeId, status: TaskStatus): Node?
+    suspend fun setStatus(nodeId: NodeId, status: TaskStatus, due: String?): Node?
 }
 
 /** The tools MindGraph exposes to agents. */
@@ -64,6 +65,10 @@ private fun createTaskTool(vault: VaultAccess) = McpTool(
                 put("type", "string")
                 put("description", "Optional markdown body with the detail behind the task.")
             }
+            putJsonObject("due") {
+                put("type", "string")
+                put("description", "Optional deadline as a date, e.g. 2026-09-04. Ready work is ordered by it.")
+            }
         }
         putJsonArray("required") { add("title") }
         put("additionalProperties", false)
@@ -71,9 +76,13 @@ private fun createTaskTool(vault: VaultAccess) = McpTool(
 ) { arguments ->
     val title = arguments.requiredString("title")
     val body = arguments["body"]?.jsonPrimitive?.contentOrNull.orEmpty()
+    val due = arguments.optionalDueDate()
 
-    val node = runBlocking { vault.createTask(title, body) }
-    "Created task \"${node.title}\" with id ${node.id.value}."
+    val node = runBlocking { vault.createTask(title, body, due) }
+    buildString {
+        append("Created task \"${node.title}\" with id ${node.id.value}.")
+        due?.let { append(" Due $it.") }
+    }
 }
 
 private fun linkNodesTool(vault: VaultAccess) = McpTool(
@@ -174,8 +183,8 @@ private fun listReadyTasksTool(vault: VaultAccess) = McpTool(
     runBlocking {
         val nodes = vault.nodes()
         val graph = TaskGraph(nodes)
-        val ready = graph.readyTasks()
-            .sortedWith(compareByDescending<Node> { graph.unblockedCount(it.id) }.thenBy { it.title })
+        val today = LocalDate.now()
+        val ready = graph.rankedReadyTasks(today)
         val blocked = nodes.count { it.task?.status?.isOpen == true && graph.isBlocked(it.id) }
 
         if (ready.isEmpty()) {
@@ -190,8 +199,11 @@ private fun listReadyTasksTool(vault: VaultAccess) = McpTool(
                 if (blocked > 0) append(", $blocked blocked")
                 append(":\n")
                 ready.take(limit).forEach { node ->
-                    val unblocks = graph.unblockedCount(node.id)
                     append("- ${node.title} (${node.id.value})")
+                    node.task?.dueDate?.let { due ->
+                        append(if (due.isBefore(today)) " — OVERDUE, was due $due" else " — due $due")
+                    }
+                    val unblocks = graph.unblockedCount(node.id)
                     if (unblocks > 0) append(" — finishing it unblocks $unblocks")
                     append("\n")
                 }
@@ -219,6 +231,10 @@ private fun updateStatusTool(vault: VaultAccess) = McpTool(
                 putJsonArray("enum") { STATUSES.forEach { add(it) } }
                 put("description", "'done' and 'dropped' both close the task and unblock its dependents.")
             }
+            putJsonObject("due") {
+                put("type", "string")
+                put("description", "Optional deadline as a date, e.g. 2026-09-04. Omit to leave it as it is.")
+            }
         }
         putJsonArray("required") { add("node"); add("status") }
         put("additionalProperties", false)
@@ -226,6 +242,7 @@ private fun updateStatusTool(vault: VaultAccess) = McpTool(
 ) { arguments ->
     val reference = arguments.requiredString("node")
     val raw = arguments.requiredString("status")
+    val due = arguments.optionalDueDate()
     val status = TaskStatus.parse(raw)
         ?: throw IllegalArgumentException(
             "status must be one of ${STATUSES.joinToString(", ")}, not \"$raw\".",
@@ -236,7 +253,7 @@ private fun updateStatusTool(vault: VaultAccess) = McpTool(
         val node = resolve(before, reference)
         val readyBefore = TaskGraph(before).readyTasks().map { it.id }.toSet()
 
-        val saved = vault.setStatus(node.id, status)
+        val saved = vault.setStatus(node.id, status, due)
             ?: throw IllegalStateException("Refused: \"${node.title}\" no longer exists.")
 
         // What the change freed up. This is the whole reason the edges are worth storing, so
@@ -247,6 +264,7 @@ private fun updateStatusTool(vault: VaultAccess) = McpTool(
 
         buildString {
             append("\"${saved.title}\" is now ${status.name.lowercase()}.")
+            due?.let { append(" Due $it.") }
             if (freed.isNotEmpty()) {
                 append(" That unblocked ${freed.size} task(s): ")
                 append(freed.joinToString(", ") { "\"${it.title}\" (${it.id.value})" })
@@ -260,6 +278,21 @@ private const val DEPENDS_ON = "depends_on"
 private const val RELATES_TO = "relates_to"
 private const val DEFAULT_LIMIT = 10
 private val STATUSES = TaskStatus.entries.map { it.name.lowercase() }
+
+/**
+ * A deadline, validated here rather than stored as typed. A date the ranking cannot read would
+ * silently do nothing at all, and a model that guessed the format wrong should be told so at
+ * the point it guessed — not leave a task that quietly never becomes urgent.
+ */
+private fun JsonObject.optionalDueDate(): String? {
+    val raw = this["due"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        ?: return null
+    val parsed = runCatching { LocalDate.parse(raw) }.getOrNull()
+        ?: throw IllegalArgumentException(
+            "due must be a date like 2026-09-04, not \"$raw\".",
+        )
+    return parsed.toString()
+}
 
 private fun JsonObject.requiredString(key: String): String {
     val value = this[key]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()

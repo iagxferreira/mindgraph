@@ -15,15 +15,15 @@ import dev.mindgraph.storage.NodeStore
  */
 class StoreVault(private val store: NodeStore) : VaultAccess {
 
-    override suspend fun createTask(title: String, body: String): Node =
-        store.create(title, body, TaskFacet(TaskStatus.Todo))
+    override suspend fun createTask(title: String, body: String, due: String?): Node =
+        store.create(title, body, TaskFacet(TaskStatus.Todo, due = due))
 
     override suspend fun nodes(): List<Node> = store.load()
 
-    override suspend fun setStatus(nodeId: NodeId, status: TaskStatus): Node? {
+    override suspend fun setStatus(nodeId: NodeId, status: TaskStatus, due: String?): Node? {
         val node = store.load().find { it.id == nodeId } ?: return null
         val facet = node.task ?: TaskFacet(status = status)
-        return store.save(node.copy(task = facet.copy(status = status)))
+        return store.save(node.copy(task = facet.copy(status = status, due = due ?: facet.due)))
     }
 
     override suspend fun link(

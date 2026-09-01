@@ -86,8 +86,13 @@ class AppViewModel(
      * calling in over MCP need the id back, and routing them through here — rather than at the
      * store — is what makes a task an agent created appear on the graph without a reload.
      */
-    suspend fun createNodeNow(title: String, body: String = "", asTask: Boolean = false): Node {
-        val facet = if (asTask) TaskFacet(status = TaskStatus.Todo) else null
+    suspend fun createNodeNow(
+        title: String,
+        body: String = "",
+        asTask: Boolean = false,
+        due: String? = null,
+    ): Node {
+        val facet = if (asTask) TaskFacet(status = TaskStatus.Todo, due = due) else null
         val created = store.create(title.trim().ifBlank { "Untitled" }, body, facet)
         refresh()
         selectedNodeId = created.id
@@ -153,13 +158,16 @@ class AppViewModel(
      * Sets a status and hands back the node as saved. A note given a status becomes a task —
      * the facet is the only thing that distinguishes them, so there is nothing else to do.
      */
-    suspend fun setStatusNow(nodeId: NodeId, status: TaskStatus): Node? {
+    suspend fun setStatusNow(nodeId: NodeId, status: TaskStatus, due: String? = null): Node? {
         val node = nodeById(nodeId) ?: return null
         val facet = node.task ?: TaskFacet(status = status)
         val saved = store.save(
             node.copy(
                 task = facet.copy(
                     status = status,
+                    // A due date is only replaced when one is given: closing a task must not
+                    // quietly erase the deadline it was closed against.
+                    due = due ?: facet.due,
                     completedAt = if (status == TaskStatus.Done) Instant.now().toString() else null,
                 ),
             ),

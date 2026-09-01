@@ -68,8 +68,11 @@ fun App() {
             if (model != null) {
                 DisposableEffect(model) {
                     val vault = object : VaultAccess {
-                        override suspend fun createTask(title: String, body: String): Node =
-                            model.createNodeNow(title, body, asTask = true)
+                        override suspend fun createTask(
+                            title: String,
+                            body: String,
+                            due: String?,
+                        ): Node = model.createNodeNow(title, body, asTask = true, due = due)
 
                         override suspend fun nodes(): List<Node> = model.nodes
 
@@ -79,8 +82,11 @@ fun App() {
                             kind: EdgeKind,
                         ): LinkOutcome = model.linkNow(sourceId, targetId, kind)
 
-                        override suspend fun setStatus(nodeId: NodeId, status: TaskStatus): Node? =
-                            model.setStatusNow(nodeId, status)
+                        override suspend fun setStatus(
+                            nodeId: NodeId,
+                            status: TaskStatus,
+                            due: String?,
+                        ): Node? = model.setStatusNow(nodeId, status, due)
                     }
                     val server = McpHttpServer(McpDispatcher(mindGraphTools(vault)))
                     if (server.start()) {
