@@ -88,8 +88,20 @@ class McpDispatcher(
 
         return runCatching { tool.execute(arguments) }.fold(
             onSuccess = { success(id, toolResult(it, isError = false)) },
-            onFailure = { success(id, toolResult(it.message ?: it.toString(), isError = true)) },
+            onFailure = { success(id, toolResult(describe(it), isError = true)) },
         )
+    }
+
+    /**
+     * What the model reads when a tool fails. The two exceptions a tool raises deliberately
+     * carry a sentence written for the reader, so they are passed through untouched; anything
+     * else is a genuine fault whose message alone can be meaningless — a NoClassDefFoundError's
+     * message is just a class name — so it is named by type.
+     */
+    private fun describe(failure: Throwable): String = when (failure) {
+        is IllegalArgumentException, is IllegalStateException ->
+            failure.message ?: failure.toString()
+        else -> "${failure::class.simpleName ?: "Error"}: ${failure.message ?: "no detail"}"
     }
 
     private fun toolResult(text: String, isError: Boolean): JsonObject = buildJsonObject {
