@@ -11,6 +11,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,6 +19,11 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import dev.mindgraph.mcp.McpDispatcher
+import dev.mindgraph.mcp.McpHttpServer
+import dev.mindgraph.mcp.TaskCreator
+import dev.mindgraph.mcp.mindGraphTools
+import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
 import dev.mindgraph.state.AppViewModel
 import dev.mindgraph.storage.NodeStore
@@ -52,6 +58,24 @@ fun App() {
             }
 
             val model = viewModel
+
+            // The MCP server lives exactly as long as the window does, and it is handed the same
+            // view model the UI draws — so a task an agent creates lands on the graph on screen,
+            // not just on disk.
+            if (model != null) {
+                DisposableEffect(model) {
+                    val creator = object : TaskCreator {
+                        override suspend fun create(title: String, body: String): Node =
+                            model.createNodeNow(title, body, asTask = true)
+                    }
+                    val server = McpHttpServer(McpDispatcher(mindGraphTools(creator)))
+                    if (server.start()) {
+                        println("MindGraph: MCP server listening on ${server.endpoint}")
+                    }
+                    onDispose { server.stop() }
+                }
+            }
+
             if (model == null) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
