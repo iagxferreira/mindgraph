@@ -1,5 +1,6 @@
 package dev.mindgraph.storage
 
+import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskFacet
 import dev.mindgraph.model.TaskStatus
 import java.nio.file.Files
@@ -176,5 +177,90 @@ class NodeStoreTest {
         assertTrue(earlier < later)
         assertTrue(Ulid.looksValid(earlier))
         assertNotNull(Ulid.looksValid(later).takeIf { it })
+    }
+
+    @Test
+    fun kindDefaultsToNoteAndRoundTrips() = runTest {
+        val store = newStore()
+        store.create("A plain thought")
+
+        assertEquals(NodeKind.Note, store.load().single().kind)
+    }
+
+    @Test
+    fun anRfcKeepsItsKindAcrossAReload() = runTest {
+        val store = newStore()
+        store.create("RFC-001: the MCP surface", "Context and decision.", kind = NodeKind.Rfc)
+
+        assertEquals(NodeKind.Rfc, store.load().single().kind)
+    }
+
+    @Test
+    fun kindAndTheTaskFacetAreIndependent() = runTest {
+        val store = newStore()
+        // The point of keeping the axes apart: writing an RFC can itself be tracked work.
+        store.create(
+            "RFC-002: the import",
+            "",
+            TaskFacet(status = TaskStatus.Doing),
+            NodeKind.Rfc,
+        )
+
+        val loaded = store.load().single()
+        assertEquals(NodeKind.Rfc, loaded.kind)
+        assertEquals(TaskStatus.Doing, loaded.task?.status)
+        assertTrue(loaded.isTask)
+    }
+
+    @Test
+    fun aFileWithNoKindIsReadAsANote() = runTest {
+        val vault = Vault(Files.createTempDirectory("mindgraph-legacy"))
+        vault.prepare()
+        // A vault written before `kind` existed, or a file typed by hand.
+        Files.writeString(
+            vault.nodesDir.resolve("older.md"),
+            """
+            ---
+            id: 01M0V4BQMAJ000RTB5PNFK2P5N
+            title: Written before kind existed
+            ---
+
+            Still a perfectly good note.
+            """.trimIndent(),
+        )
+
+        assertEquals(NodeKind.Note, NodeStore(vault).load().single().kind)
+    }
+
+    @Test
+    fun anUnrecognisedKindCostsTheLabelNotTheFile() = runTest {
+        val vault = Vault(Files.createTempDirectory("mindgraph-typo"))
+        vault.prepare()
+        Files.writeString(
+            vault.nodesDir.resolve("typo.md"),
+            """
+            ---
+            id: 01M0V4BQMAJ000RTB5PNFK2P5N
+            title: Kind with a typo
+            kind: refrence
+            ---
+
+            Body survives.
+            """.trimIndent(),
+        )
+
+        val loaded = NodeStore(vault).load().single()
+        assertEquals(NodeKind.Note, loaded.kind)
+        assertEquals("Kind with a typo", loaded.title)
+    }
+
+    @Test
+    fun changingKindSurvivesASave() = runTest {
+        val store = newStore()
+        val created = store.create("Promote me")
+
+        store.save(created.copy(kind = NodeKind.Reference))
+
+        assertEquals(NodeKind.Reference, store.load().single().kind)
     }
 }

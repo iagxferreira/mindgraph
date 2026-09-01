@@ -4,6 +4,7 @@ import dev.mindgraph.model.Edge
 import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
+import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskFacet
 import dev.mindgraph.model.TaskStatus
 import java.nio.file.Files
@@ -31,7 +32,12 @@ class NodeStore(private val vault: Vault) {
             .sortedByDescending { it.updatedAt }
     }
 
-    suspend fun create(title: String, body: String = "", task: TaskFacet? = null): Node =
+    suspend fun create(
+        title: String,
+        body: String = "",
+        task: TaskFacet? = null,
+        kind: NodeKind = NodeKind.Note,
+    ): Node =
         withContext(Dispatchers.IO) {
             vault.prepare()
             val now = timestamp()
@@ -39,6 +45,7 @@ class NodeStore(private val vault: Vault) {
                 id = NodeId(Ulid.generate()),
                 title = title,
                 body = body,
+                kind = kind,
                 task = task,
                 createdAt = now,
                 updatedAt = now,
@@ -94,6 +101,9 @@ class NodeStore(private val vault: Vault) {
             id = NodeId(id),
             title = frontmatter.string(KEY_TITLE) ?: slug.replace('-', ' '),
             body = body,
+            // An unrecognised kind reads as a note rather than dropping the file: a typo in a
+            // hand-edited vault should cost you a label, not the document.
+            kind = NodeKind.parse(frontmatter.string(KEY_KIND)) ?: NodeKind.Note,
             task = status?.let {
                 TaskFacet(
                     status = it,
@@ -119,6 +129,7 @@ class NodeStore(private val vault: Vault) {
             add("---")
             add("$KEY_ID: ${node.id.value}")
             add("$KEY_TITLE: ${Frontmatter.quote(node.title)}")
+            add("$KEY_KIND: ${node.kind.slug}")
             node.task?.let { facet ->
                 add("$KEY_STATUS: ${facet.status.name.lowercase()}")
                 facet.due?.let { add("$KEY_DUE: ${Frontmatter.quote(it)}") }
@@ -201,6 +212,7 @@ class NodeStore(private val vault: Vault) {
     companion object {
         const val KEY_ID = "id"
         const val KEY_TITLE = "title"
+        const val KEY_KIND = "kind"
         const val KEY_STATUS = "status"
         const val KEY_DUE = "due"
         const val KEY_COMPLETED = "completed"
@@ -210,7 +222,7 @@ class NodeStore(private val vault: Vault) {
         const val KEY_UPDATED = "updated"
 
         val KNOWN_KEYS = setOf(
-            KEY_ID, KEY_TITLE, KEY_STATUS, KEY_DUE, KEY_COMPLETED,
+            KEY_ID, KEY_TITLE, KEY_KIND, KEY_STATUS, KEY_DUE, KEY_COMPLETED,
             KEY_DEPENDS_ON, KEY_RELATES_TO, KEY_CREATED, KEY_UPDATED,
         )
     }
