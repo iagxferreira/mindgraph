@@ -26,6 +26,15 @@ data class Node(
      */
     val assignee: String? = null,
     /**
+     * Other names this node answers to in `[[links]]`. A node already has two — its title and
+     * its slug — and this is the third: a name given from outside that neither derives from.
+     *
+     * Imported notes need it. Claude's memory files link each other by a `name:` slug while
+     * their titles are full sentences, so without a name that survives the import, twenty-five
+     * links in the vault resolve to nothing.
+     */
+    val aliases: List<String> = emptyList(),
+    /**
      * Put away, but kept. Archiving is about visibility, not outcome — which is why it is not
      * a fifth [TaskStatus]: archiving a finished task must not overwrite the fact that it was
      * finished rather than abandoned.
