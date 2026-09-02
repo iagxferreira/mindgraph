@@ -156,6 +156,10 @@ fun GraphScreen(
                 .border(1.dp, Border, RoundedCornerShape(12.dp))
                 .padding(6.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
+            // The rail is wider than the 38dp buttons it holds, and a Column defaults to Start
+            // — so without this every button sits hard against the left edge with the slack
+            // pooled on the right, which the full-width dividers make impossible to miss.
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             FloatingAction(Icons.Outlined.Add, "New note") { viewModel.createNode() }
             ActionDivider()
