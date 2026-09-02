@@ -13,11 +13,14 @@ import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.model.WorkSession
 import dev.mindgraph.model.Worker
 import dev.mindgraph.model.currentUnixTimestamp
+import dev.mindgraph.storage.MemoryImport
 import dev.mindgraph.storage.NodeStore
 import dev.mindgraph.storage.SessionLog
 import dev.mindgraph.storage.VaultWatcher
 import dev.mindgraph.storage.WikiLinks
 import dev.mindgraph.storage.toEdges
+import java.nio.file.Path
+import java.nio.file.Paths
 import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -167,6 +170,52 @@ class AppViewModel(
         refresh()
         statusMessage = "Appended"
         return saved
+    }
+
+    /**
+     * Copies Claude Code's per-project memory notes into the vault, skipping any file already
+     * imported. Read-only upstream: `~/.claude` is never written back to.
+     *
+     * Re-runnable on purpose. Claude keeps writing memory files, so this is not the one-shot it
+     * first looked like; a second run brings in what is new and leaves everything else alone.
+     */
+    suspend fun importClaudeMemoryNow(projectsRoot: Path = defaultClaudeProjectsRoot()): MemoryImportResult {
+        val files = MemoryImport.scan(projectsRoot)
+        // Origin is the source path, so a file that moved imports again rather than never.
+        // That is the right trade: a duplicate is visible and fixable, a silent gap is not.
+        val alreadyImported = store.frontmatterValues(MemoryImport.KEY_ORIGIN)
+
+        var imported = 0
+        var skipped = 0
+        var unreadable = 0
+        for (file in files) {
+            if (file.toAbsolutePath().toString() in alreadyImported) {
+                skipped++
+                continue
+            }
+            val note = MemoryImport.read(file)
+            if (note == null) {
+                unreadable++
+                continue
+            }
+            store.create(
+                title = note.title,
+                body = note.body,
+                task = null,
+                kind = note.kind,
+                extras = MemoryImport.extrasFor(note),
+            )
+            imported++
+        }
+
+        refresh()
+        val result = MemoryImportResult(imported, skipped, unreadable, files.size)
+        statusMessage = result.summary()
+        return result
+    }
+
+    fun importClaudeMemory() {
+        scope.launch { importClaudeMemoryNow() }
     }
 
     /** Titles linked in this node's body that don't exist yet — offer to create them. */
@@ -463,3 +512,23 @@ class AppViewModel(
         tickerJob = null
     }
 }
+
+/** What one run of the memory import did, in the terms a person would ask about. */
+data class MemoryImportResult(
+    val imported: Int,
+    val skipped: Int,
+    val unreadable: Int,
+    val filesFound: Int,
+) {
+    fun summary(): String = when {
+        filesFound == 0 -> "No Claude memory files found"
+        imported == 0 && skipped > 0 -> "Already imported ($skipped notes)"
+        imported == 0 -> "Nothing to import"
+        skipped > 0 -> "Imported $imported note(s), $skipped already there"
+        else -> "Imported $imported note(s)"
+    }
+}
+
+/** `~/.claude/projects`, where Claude Code keeps a memory directory per project. */
+fun defaultClaudeProjectsRoot(): Path =
+    Paths.get(System.getProperty("user.home") ?: ".", ".claude", "projects")
