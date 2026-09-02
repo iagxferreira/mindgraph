@@ -1,6 +1,7 @@
 package dev.mindgraph.mcp
 
 import dev.mindgraph.storage.NodeStore
+import dev.mindgraph.storage.SessionLog
 import dev.mindgraph.storage.Vault
 import java.net.URI
 import java.net.http.HttpClient
@@ -31,8 +32,9 @@ class McpHttpServerTest {
 
     /** Port 0 so the test never collides with a real MindGraph running on the machine. */
     private fun startServer(): McpHttpServer {
-        store = NodeStore(Vault(Files.createTempDirectory("mindgraph-mcp-http")))
-        val started = McpHttpServer(McpDispatcher(mindGraphTools(StoreVault(store))), port = 0)
+        val vault = Vault(Files.createTempDirectory("mindgraph-mcp-http"))
+        store = NodeStore(vault)
+        val started = McpHttpServer(McpDispatcher(mindGraphTools(StoreVault(store, SessionLog(vault)))), port = 0)
         assertTrue(started.start(), "server failed to start")
         server = started
         return started

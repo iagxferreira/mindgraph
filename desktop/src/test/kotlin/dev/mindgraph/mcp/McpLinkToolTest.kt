@@ -3,6 +3,7 @@ package dev.mindgraph.mcp
 import dev.mindgraph.model.Node
 import dev.mindgraph.state.TaskGraph
 import dev.mindgraph.storage.NodeStore
+import dev.mindgraph.storage.SessionLog
 import dev.mindgraph.storage.Vault
 import java.nio.file.Files
 import kotlinx.coroutines.runBlocking
@@ -23,10 +24,11 @@ class McpLinkToolTest {
     private lateinit var dispatcher: McpDispatcher
 
     private fun newVault(): StoreVault {
-        store = NodeStore(Vault(Files.createTempDirectory("mindgraph-link")))
-        val vault = StoreVault(store)
-        dispatcher = McpDispatcher(mindGraphTools(vault))
-        return vault
+        val vault = Vault(Files.createTempDirectory("mindgraph-link"))
+        store = NodeStore(vault)
+        val access = StoreVault(store, SessionLog(vault))
+        dispatcher = McpDispatcher(mindGraphTools(access))
+        return access
     }
 
     private fun task(title: String): Node = runBlocking { newTask(title) }

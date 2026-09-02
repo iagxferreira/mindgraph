@@ -3,6 +3,7 @@ package dev.mindgraph.mcp
 import dev.mindgraph.model.TaskFacet
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.storage.NodeStore
+import dev.mindgraph.storage.SessionLog
 import dev.mindgraph.storage.Vault
 import java.nio.file.Files
 import java.time.LocalDate
@@ -25,8 +26,9 @@ class McpDueDateTest {
     private lateinit var dispatcher: McpDispatcher
 
     private fun newVault() {
-        store = NodeStore(Vault(Files.createTempDirectory("mindgraph-due")))
-        dispatcher = McpDispatcher(mindGraphTools(StoreVault(store)))
+        val vault = Vault(Files.createTempDirectory("mindgraph-due"))
+        store = NodeStore(vault)
+        dispatcher = McpDispatcher(mindGraphTools(StoreVault(store, SessionLog(vault))))
     }
 
     private fun call(name: String, arguments: JsonObject): JsonObject =

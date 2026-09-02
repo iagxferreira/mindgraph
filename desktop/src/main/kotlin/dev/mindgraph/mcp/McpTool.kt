@@ -37,8 +37,16 @@ class McpTool(
 interface VaultAccess {
     suspend fun createTask(title: String, body: String, due: String?): Node
     suspend fun nodes(): List<Node>
+
+    /** Total tracked seconds on a node, both yours and every agent's. */
+    suspend fun trackedSeconds(nodeId: NodeId): Long
     suspend fun link(sourceId: NodeId, targetId: NodeId, kind: EdgeKind): LinkOutcome
-    suspend fun setStatus(nodeId: NodeId, status: TaskStatus, due: String?): Node?
+    suspend fun setStatus(
+        nodeId: NodeId,
+        status: TaskStatus,
+        due: String?,
+        agent: String?,
+    ): Node?
 }
 
 /** The tools MindGraph exposes to agents. */
@@ -235,6 +243,13 @@ private fun updateStatusTool(vault: VaultAccess) = McpTool(
                 put("type", "string")
                 put("description", "Optional deadline as a date, e.g. 2026-09-04. Omit to leave it as it is.")
             }
+            putJsonObject("agent") {
+                put("type", "string")
+                put("description",
+                    "Identify yourself, e.g. 'claude-code'. Time spent while a task is 'doing' " +
+                        "is logged against this name, so the vault can tell your work from the " +
+                        "user's.")
+            }
         }
         putJsonArray("required") { add("node"); add("status") }
         put("additionalProperties", false)
@@ -243,6 +258,8 @@ private fun updateStatusTool(vault: VaultAccess) = McpTool(
     val reference = arguments.requiredString("node")
     val raw = arguments.requiredString("status")
     val due = arguments.optionalDueDate()
+    val agent = arguments["agent"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        ?.take(MAX_AGENT_NAME)
     val status = TaskStatus.parse(raw)
         ?: throw IllegalArgumentException(
             "status must be one of ${STATUSES.joinToString(", ")}, not \"$raw\".",
@@ -253,7 +270,7 @@ private fun updateStatusTool(vault: VaultAccess) = McpTool(
         val node = resolve(before, reference)
         val readyBefore = TaskGraph(before).readyTasks().map { it.id }.toSet()
 
-        val saved = vault.setStatus(node.id, status, due)
+        val saved = vault.setStatus(node.id, status, due, agent)
             ?: throw IllegalStateException("Refused: \"${node.title}\" no longer exists.")
 
         // What the change freed up. This is the whole reason the edges are worth storing, so
@@ -265,6 +282,12 @@ private fun updateStatusTool(vault: VaultAccess) = McpTool(
         buildString {
             append("\"${saved.title}\" is now ${status.name.lowercase()}.")
             due?.let { append(" Due $it.") }
+            when (status) {
+                TaskStatus.Doing -> append(" The clock is running against ${agent ?: "you"}.")
+                else -> vault.trackedSeconds(saved.id).takeIf { it > 0 }?.let {
+                    append(" ${formatDuration(it)} tracked on it.")
+                }
+            }
             if (freed.isNotEmpty()) {
                 append(" That unblocked ${freed.size} task(s): ")
                 append(freed.joinToString(", ") { "\"${it.title}\" (${it.id.value})" })
@@ -277,6 +300,17 @@ private fun updateStatusTool(vault: VaultAccess) = McpTool(
 private const val DEPENDS_ON = "depends_on"
 private const val RELATES_TO = "relates_to"
 private const val DEFAULT_LIMIT = 10
+private const val MAX_AGENT_NAME = 64
+
+private fun formatDuration(seconds: Long): String {
+    val hours = seconds / 3600
+    val minutes = (seconds % 3600) / 60
+    return when {
+        hours > 0 -> "${hours}h ${minutes}m"
+        minutes > 0 -> "${minutes}m"
+        else -> "${seconds}s"
+    }
+}
 private val STATUSES = TaskStatus.entries.map { it.name.lowercase() }
 
 /**

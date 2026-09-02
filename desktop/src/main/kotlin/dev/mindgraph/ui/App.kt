@@ -27,6 +27,7 @@ import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.TaskStatus
+import dev.mindgraph.model.Worker
 import dev.mindgraph.state.AppViewModel
 import dev.mindgraph.state.LinkOutcome
 import dev.mindgraph.storage.NodeStore
@@ -86,7 +87,19 @@ fun App() {
                             nodeId: NodeId,
                             status: TaskStatus,
                             due: String?,
-                        ): Node? = model.setStatusNow(nodeId, status, due)
+                            agent: String?,
+                        ): Node? = model.setStatusNow(
+                            nodeId,
+                            status,
+                            due,
+                            // Reaching the app over MCP is what makes it machine labour; the
+                            // same change made in the window is yours.
+                            worker = Worker.Agent,
+                            agent = agent,
+                        )
+
+                        override suspend fun trackedSeconds(nodeId: NodeId): Long =
+                            model.trackedSecondsFor(nodeId)
                     }
                     val server = McpHttpServer(McpDispatcher(mindGraphTools(vault)))
                     if (server.start()) {

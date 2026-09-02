@@ -7,24 +7,60 @@ import dev.mindgraph.model.TaskFacet
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.LinkOutcome
 import dev.mindgraph.state.Linking
+import dev.mindgraph.model.WorkSession
+import dev.mindgraph.model.Worker
+import dev.mindgraph.model.currentUnixTimestamp
 import dev.mindgraph.storage.NodeStore
+import dev.mindgraph.storage.SessionLog
 
 /**
  * A [VaultAccess] over a real [NodeStore]. It goes through [Linking] exactly as the view model
  * does, so these tests exercise the real rules rather than a permissive stand-in.
  */
-class StoreVault(private val store: NodeStore) : VaultAccess {
+class StoreVault(
+    private val store: NodeStore,
+    private val log: SessionLog,
+    /** Fixes the length of a tracked stretch so a test doesn't depend on how fast it runs. */
+    private val elapsedOverride: Long? = null,
+) : VaultAccess {
+
+    private var startedAtUnix: Long? = null
+    private var runningAgent: String? = null
 
     override suspend fun createTask(title: String, body: String, due: String?): Node =
         store.create(title, body, TaskFacet(TaskStatus.Todo, due = due))
 
     override suspend fun nodes(): List<Node> = store.load()
 
-    override suspend fun setStatus(nodeId: NodeId, status: TaskStatus, due: String?): Node? {
+    override suspend fun setStatus(
+        nodeId: NodeId,
+        status: TaskStatus,
+        due: String?,
+        agent: String?,
+    ): Node? {
         val node = store.load().find { it.id == nodeId } ?: return null
         val facet = node.task ?: TaskFacet(status = status)
-        return store.save(node.copy(task = facet.copy(status = status, due = due ?: facet.due)))
+        val saved = store.save(node.copy(task = facet.copy(status = status, due = due ?: facet.due)))
+
+        // The clock the view model runs, reduced to what a test needs: doing opens a stretch,
+        // anything else closes it and logs who spent the time.
+        if (status == TaskStatus.Doing) {
+            startedAtUnix = currentUnixTimestamp()
+            runningAgent = agent
+        } else {
+            startedAtUnix?.let { started ->
+                val now = currentUnixTimestamp()
+                log.append(
+                    WorkSession(nodeId, started, now, elapsedOverride ?: (now - started), Worker.Agent, runningAgent),
+                )
+                startedAtUnix = null
+            }
+        }
+        return saved
     }
+
+    override suspend fun trackedSeconds(nodeId: NodeId): Long =
+        log.load().filter { it.nodeId == nodeId }.sumOf { it.seconds }
 
     override suspend fun link(
         sourceId: NodeId,

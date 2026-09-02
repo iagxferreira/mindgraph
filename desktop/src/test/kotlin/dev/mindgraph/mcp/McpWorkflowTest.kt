@@ -4,6 +4,7 @@ import dev.mindgraph.model.Node
 import dev.mindgraph.model.TaskFacet
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.storage.NodeStore
+import dev.mindgraph.storage.SessionLog
 import dev.mindgraph.storage.Vault
 import java.nio.file.Files
 import kotlinx.coroutines.runBlocking
@@ -25,8 +26,9 @@ class McpWorkflowTest {
     private lateinit var dispatcher: McpDispatcher
 
     private fun newVault() {
-        store = NodeStore(Vault(Files.createTempDirectory("mindgraph-loop")))
-        dispatcher = McpDispatcher(mindGraphTools(StoreVault(store)))
+        val vault = Vault(Files.createTempDirectory("mindgraph-loop"))
+        store = NodeStore(vault)
+        dispatcher = McpDispatcher(mindGraphTools(StoreVault(store, SessionLog(vault))))
     }
 
     private fun task(title: String): Node =
