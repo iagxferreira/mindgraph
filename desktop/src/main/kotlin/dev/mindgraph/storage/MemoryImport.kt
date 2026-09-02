@@ -99,7 +99,12 @@ object MemoryImport {
         )
     }
 
-    /** The frontmatter keys an imported node carries, ready to hand to `NodeStore.create`. */
+    /**
+     * The frontmatter keys an imported node carries, ready to hand to `NodeStore.create`.
+     *
+     * [KEY_MEMORY_NAME] is still written even though the name is also an alias: the alias is
+     * how the graph resolves links, while this records what the source file called itself.
+     */
     fun extrasFor(note: MemoryNote): Map<String, String> = buildMap {
         put(KEY_ORIGIN, note.origin)
         put(KEY_ORIGIN_PROJECT, note.originProject)

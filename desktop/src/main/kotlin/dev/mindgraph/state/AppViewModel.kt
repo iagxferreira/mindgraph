@@ -198,6 +198,8 @@ class AppViewModel(
                 unreadable++
                 continue
             }
+            // The memory name is written as an extra and read back as an alias, so
+            // `[[that-name]]` resolves here with no second write to make it so.
             store.create(
                 title = note.title,
                 body = note.body,
