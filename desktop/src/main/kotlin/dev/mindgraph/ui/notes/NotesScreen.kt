@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Download
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Unarchive
 import androidx.compose.material3.Button
@@ -133,6 +134,7 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             )
             Text("${filteredNodes.size} total", style = MaterialTheme.typography.labelSmall, color = TextMuted)
             TextButton(onClick = { viewModel.createNode() }) { Text("New", color = Accent) }
+            ImportMemoryButton(onImport = { viewModel.importClaudeMemory() })
             DoneFilterToggle(hideDone = hideDone, onToggle = { hideDone = !hideDone })
             ArchiveFilterMenu(showArchived = showArchived, onChange = { showArchived = it })
         }
@@ -216,6 +218,29 @@ private fun SectionHeader(kind: NodeKind, count: Int) {
             modifier = Modifier.weight(1f),
         )
         Text(count.toString(), style = MaterialTheme.typography.labelSmall, color = TextMuted)
+    }
+}
+
+/**
+ * Pulls in Claude Code's memory notes. Safe to press twice: files already imported are skipped,
+ * which matters because Claude keeps writing new ones and this is how they arrive.
+ */
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun ImportMemoryButton(onImport: () -> Unit) {
+    val description = "Import Claude memory notes"
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(description) } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(onClick = onImport) {
+            Icon(
+                imageVector = Icons.Outlined.Download,
+                contentDescription = description,
+                tint = TextMuted,
+            )
+        }
     }
 }
 
