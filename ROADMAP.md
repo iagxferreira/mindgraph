@@ -30,17 +30,18 @@ and what it unblocks. This file is the readable summary, not the source of truth
 - Nodes can be **archived** — kept with their id, links and tracked time, out of the
   graph and out of ready work — and **assigned** to a person or an agent, which filters
   what you are shown without ever gating what is ready.
+- **Claude Code's memory notes import into the vault**, re-runnably and read-only
+  upstream, keeping `origin`, `originProject`, `memoryName` and `memoryType` in
+  frontmatter. `memoryType` is deliberately *not* mapped onto `kind`: one says what a fact
+  is about, the other what a document is, and only `reference` means the same in both.
 - `.claude/skills/mindgraph-workflow` records the working agreement: the node exists
   before the work does.
 
 ## Next Milestone
 
-The vault's own graph puts the import first — it unblocks the most.
+The memory import has landed; the plans import and wikilink resolution are what it
+unblocks.
 
-- **Import the notes coding agents already write.** `~/.claude/projects/*/memory/*.md`
-  is markdown with frontmatter and `[[wikilinks]]` already; it is siloed per project and
-  has never been readable as one graph. Minting ULIDs is required — files without one
-  are skipped, silently.
 - **Import `~/.claude/plans/*.md` as RFC nodes.** They are RFCs already, without the
   label.
 - **Resolve imported wikilinks into edges**, slug-aware, or the import lands as
