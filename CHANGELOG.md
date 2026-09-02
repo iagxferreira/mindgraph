@@ -6,6 +6,10 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **The vault is watched.** A node written, edited or deleted outside the window — by an
+  agent over MCP, an editor, or a git checkout — reaches the graph on its own, with no
+  manual reload. Bursts are coalesced, so one save is one reload.
+
 - **`create_note` and `append_node_body` over MCP.** Agents can record what is not work —
   a note, RFC or reference with no status, so it never lands in ready work as a task
   nobody will do — and keep a running record on the node they are working. Appending only

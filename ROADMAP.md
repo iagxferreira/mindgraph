@@ -12,7 +12,12 @@ and what it unblocks. This file is the readable summary, not the source of truth
 - MindGraph is a Kotlin/Compose Multiplatform Desktop app over a markdown vault. Every
   node is one `.md` file whose frontmatter fully describes it.
 - **The running app hosts an MCP server** on loopback, so coding agents read and write
-  the graph directly: `list_ready_tasks`, `create_task`, `link_nodes`, `update_status`.
+  the graph directly: `list_ready_tasks`, `get_node`, `create_task`, `create_note`,
+  `append_node_body`, `link_nodes`, `update_status`. Agents add — a note beside the work,
+  or text on the end of it — and never rewrite what a human wrote.
+- **The vault is watched.** A node written outside the window, by an agent in another
+  process or an editor, reaches the graph without a reload. Markdown stays the source of
+  truth in fact and not just in principle.
 - Nodes have a **kind** — note, RFC, or reference — drawn on the canvas as shape, with
   a filter that narrows the graph and sections that group the list.
 - **Readiness is derived**, never declared: a task whose dependencies are unfinished is
@@ -43,12 +48,9 @@ The vault's own graph puts the import first — it unblocks the most.
 - **Retrieval over MCP**: `search_notes`, then `related_notes` — walking edges rather
   than matching strings, and crossing projects, which per-project memory structurally
   cannot do.
-- **Watch the vault** so edits made outside the app appear without a reload. The MCP
-  server made this a two-writer system and nothing guards it yet.
 
 ## After That
 
-- `get_node`, so an agent can read a node in full rather than a one-line summary.
 - Restoring archived nodes from the node list, and sorting it by more than recency.
 - Packaging (`packageDeb`/`packageMsi`/`packageDmg`) so the app outlives the terminal
   that launched it, and registering the MCP server at user scope so agents in other
