@@ -11,24 +11,30 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Timer
+import androidx.compose.material.icons.outlined.Unarchive
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,6 +43,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -70,6 +77,7 @@ import dev.mindgraph.ui.theme.TextPrimary
 import java.time.LocalDate
 import dev.mindgraph.ui.theme.Overdue
 import dev.mindgraph.ui.theme.SurfaceHigh
+import dev.mindgraph.ui.theme.Surface
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.key
@@ -80,6 +88,8 @@ import androidx.compose.foundation.border
 private const val EditModeRatio = 1f
 private const val SplitModeRatio = 0.5f
 private const val PreviewModeRatio = 0f
+private val EditorControlShape = RoundedCornerShape(8.dp)
+private val EditorControlHeight = 34.dp
 
 /**
  * The writing surface. A node is edited the same way whether or not it's a task — the task
@@ -97,14 +107,18 @@ fun NoteEditorPanel(
 ) {
     var titleField by remember(node.id) { mutableStateOf(TextFieldValue(node.title)) }
     var bodyField by remember(node.id) { mutableStateOf(TextFieldValue(node.body)) }
-    var splitRatio by remember(node.id) { mutableStateOf(SplitModeRatio) }
+    var splitRatio by remember(node.id) { mutableStateOf(PreviewModeRatio) }
 
     val graph = viewModel.graph
     val blockers = graph.blockers(node.id)
+    val isPreview = splitRatio < 0.02f
 
     Column(modifier = modifier.fillMaxSize()) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Surface)
+                .padding(horizontal = 24.dp, vertical = 18.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             BasicTextField(
@@ -114,51 +128,65 @@ fun NoteEditorPanel(
                 cursorBrush = SolidColor(Accent),
                 modifier = Modifier.weight(1f),
             )
-            Spacer(modifier = Modifier.width(16.dp))
+            EditorModeToggle(splitRatio = splitRatio, onRatioChange = { splitRatio = it })
             TimeTrackingRow(node = node, viewModel = viewModel)
+            IconButton(onClick = { viewModel.deleteNode(node.id) }) {
+                Icon(Icons.Default.Delete, contentDescription = "Delete note")
+            }
         }
 
-        FlowRow(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Surface)
+                .padding(horizontal = 24.dp)
+                .padding(bottom = 14.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            KindChip(kind = node.kind, onChange = { viewModel.setKind(node.id, it) })
-
-            AssigneeChip(
-                assignee = node.assignee,
-                onSet = { viewModel.setAssignee(node.id, it) },
-            )
-
-            if (node.isTask) {
-                TaskStatus.entries.forEach { status ->
-                    StatusChip(
-                        status = status,
-                        isActive = node.task?.status == status,
-                        onClick = { viewModel.setStatus(node.id, status) },
+            EditorControlRow(label = "Node") {
+                KindChip(kind = node.kind, onChange = { viewModel.setKind(node.id, it) })
+                AssigneeChip(
+                    assignee = node.assignee,
+                    onSet = { viewModel.setAssignee(node.id, it) },
+                )
+            }
+            EditorControlRow(
+                label = "Task",
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                if (node.isTask) {
+                    StatusMenu(
+                        selected = node.task?.status,
+                        onSelect = { viewModel.setStatus(node.id, it) },
+                    )
+                    DueChip(
+                        due = node.task?.due,
+                        isOverdue = node.task?.dueDate?.isBefore(LocalDate.now()) == true &&
+                            node.task?.status != TaskStatus.Done,
+                        onSet = { viewModel.setDue(node.id, it) },
+                    )
+                } else {
+                    TextButton(onClick = { viewModel.promoteToTask(node.id) }) {
+                    Text("Convert to task", style = MaterialTheme.typography.labelMedium, color = Accent)
+                    }
+                }
+                OutlinedButton(
+                    onClick = { viewModel.setArchived(node.id, !node.archived) },
+                    modifier = Modifier.height(EditorControlHeight),
+                    shape = EditorControlShape,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextMuted),
+                ) {
+                    Icon(
+                        imageVector = if (node.archived) Icons.Outlined.Unarchive else Icons.Outlined.Archive,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (node.archived) "Restore" else "Archive",
+                        style = MaterialTheme.typography.labelMedium,
                     )
                 }
-                DueChip(
-                    due = node.task?.due,
-                    isOverdue = node.task?.dueDate?.isBefore(LocalDate.now()) == true &&
-                        node.task?.status != TaskStatus.Done,
-                    onSet = { viewModel.setDue(node.id, it) },
-                )
-                TextButton(onClick = { viewModel.demoteToNote(node.id) }) {
-                    Text("Not a task", style = MaterialTheme.typography.labelSmall, color = TextMuted)
-                }
-            } else {
-                TextButton(onClick = { viewModel.promoteToTask(node.id) }) {
-                    Text("Make this a task", style = MaterialTheme.typography.labelMedium, color = Accent)
-                }
-            }
-
-            TextButton(onClick = { viewModel.setArchived(node.id, !node.archived) }) {
-                Text(
-                    if (node.archived) "Restore" else "Archive",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = if (node.archived) Accent else TextMuted,
-                )
             }
         }
 
@@ -182,23 +210,23 @@ fun NoteEditorPanel(
 
         HorizontalDivider()
 
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween,
-        ) {
-            MarkdownToolbar(value = bodyField, onValueChange = { bodyField = it })
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                EditorModeToggle(splitRatio = splitRatio, onRatioChange = { splitRatio = it })
-                IconButton(onClick = { viewModel.saveNode(node.id, titleField.text, bodyField.text) }) {
-                    Icon(Icons.Default.Save, contentDescription = "Save")
-                }
-                IconButton(onClick = { viewModel.deleteNode(node.id) }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete note")
+        if (!isPreview) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                MarkdownToolbar(value = bodyField, onValueChange = { bodyField = it })
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { viewModel.saveNode(node.id, titleField.text, bodyField.text) }) {
+                        Icon(Icons.Default.Save, contentDescription = "Save")
+                    }
                 }
             }
+            HorizontalDivider()
         }
-        HorizontalDivider()
 
         BoxWithConstraints(modifier = Modifier.weight(1f).fillMaxWidth()) {
             val totalWidthPx = constraints.maxWidth.toFloat()
@@ -247,6 +275,27 @@ fun NoteEditorPanel(
     }
 }
 
+@Composable
+private fun EditorControlRow(
+    label: String,
+    modifier: Modifier = Modifier,
+    content: @Composable RowScope.() -> Unit,
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = TextMuted,
+            modifier = Modifier.width(44.dp),
+        )
+        content()
+    }
+}
+
 /**
  * Who is meant to pick this up. Free text, because the names that matter are whatever you
  * and your agents already call yourselves — the session log takes an agent's own word for
@@ -286,7 +335,7 @@ private fun AssigneeChip(assignee: String?, onSet: (String?) -> Unit) {
             decorationBox = { field ->
                 if (draft.isEmpty()) {
                     Text(
-                        "who?",
+                        "Who?",
                         style = MaterialTheme.typography.labelMedium,
                         color = TextMuted,
                     )
@@ -305,7 +354,7 @@ private fun AssigneeChip(assignee: String?, onSet: (String?) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                if (assignee == null) "+ assign" else "@$assignee",
+                if (assignee == null) "+ Assign" else "@$assignee",
                 style = MaterialTheme.typography.labelMedium,
                 color = if (assignee == null) TextMuted else Accent,
                 maxLines = 1,
@@ -343,7 +392,7 @@ private fun KindChip(kind: NodeKind, onChange: (NodeKind) -> Unit) {
         ) {
             KindGlyph(kind, TextMuted, size = 8.dp)
             Text(
-                kind.name.lowercase(),
+                kind.name.lowercase().replaceFirstChar { it.uppercase() },
                 style = MaterialTheme.typography.labelMedium,
                 color = TextMuted,
             )
@@ -358,7 +407,7 @@ private fun KindChip(kind: NodeKind, onChange: (NodeKind) -> Unit) {
                     },
                     text = {
                         Text(
-                            option.name.lowercase(),
+                            option.name.lowercase().replaceFirstChar { it.uppercase() },
                             style = MaterialTheme.typography.labelMedium,
                             color = if (option == kind) Accent else TextPrimary,
                         )
@@ -436,7 +485,7 @@ private fun DueChip(due: String?, isOverdue: Boolean, onSet: (String?) -> Unit) 
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                if (due == null) "+ due" else if (isOverdue) "overdue $due" else "due $due",
+                if (due == null) "+ Due" else if (isOverdue) "Overdue $due" else "Due $due",
                 style = MaterialTheme.typography.labelMedium,
                 color = tint,
             )
@@ -453,24 +502,57 @@ private fun DueChip(due: String?, isOverdue: Boolean, onSet: (String?) -> Unit) 
 }
 
 @Composable
-private fun StatusChip(status: TaskStatus, isActive: Boolean, onClick: () -> Unit) {
-    val hue = when (status) {
+private fun StatusMenu(selected: TaskStatus?, onSelect: (TaskStatus) -> Unit) {
+    var open by remember(selected) { mutableStateOf(false) }
+    val current = selected ?: TaskStatus.Todo
+    val hue = when (current) {
         TaskStatus.Done -> Done
         TaskStatus.Dropped -> TextMuted
         else -> Accent
     }
-    Box(
-        modifier = Modifier
-            .clip(RoundedCornerShape(7.dp))
-            .background(if (isActive) hue.copy(alpha = 0.18f) else Color.Transparent)
-            .clickable(onClick = onClick)
-            .padding(horizontal = 11.dp, vertical = 5.dp),
-    ) {
-        Text(
-            status.name.lowercase(),
-            style = MaterialTheme.typography.labelMedium,
-            color = if (isActive) hue else TextMuted,
-        )
+
+    Box {
+        OutlinedButton(
+            onClick = { open = true },
+            modifier = Modifier.height(EditorControlHeight),
+            shape = EditorControlShape,
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = hue),
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(hue),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                "Status: ${current.name.lowercase().replaceFirstChar { it.uppercase() }}",
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
+
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            TaskStatus.entries.forEach { status ->
+                DropdownMenuItem(
+                    onClick = { onSelect(status); open = false },
+                    leadingIcon = {
+                        Box(
+                            modifier = Modifier
+                                .size(7.dp)
+                                .clip(CircleShape)
+                                .background(
+                                    when (status) {
+                                        TaskStatus.Done -> Done
+                                        TaskStatus.Dropped -> TextMuted
+                                        else -> Accent
+                                    },
+                                ),
+                        )
+                    },
+                    text = { Text(status.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                )
+            }
+        }
     }
 }
 

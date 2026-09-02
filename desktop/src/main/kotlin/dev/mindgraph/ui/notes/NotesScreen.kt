@@ -50,7 +50,7 @@ import dev.mindgraph.ui.theme.Surface
 import dev.mindgraph.ui.theme.TextMuted
 import dev.mindgraph.ui.theme.TextPrimary
 
-private val ListWidth = 260.dp
+private val ListWidth = 320.dp
 
 /** The writing destination: every node in a list, the focused editor filling the rest. */
 @Composable
@@ -108,15 +108,16 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
 
     Column(modifier = modifier.background(Surface)) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(start = 14.dp, end = 6.dp, top = 10.dp, bottom = 10.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 18.dp, end = 10.dp, top = 16.dp, bottom = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
                 "All nodes",
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary,
                 modifier = Modifier.weight(1f),
             )
+            Text("${filteredNodes.size} total", style = MaterialTheme.typography.labelSmall, color = TextMuted)
             TextButton(onClick = { viewModel.createNode() }) { Text("New", color = Accent) }
             DoneFilterToggle(hideDone = hideDone, onToggle = { hideDone = !hideDone })
         }
@@ -125,7 +126,6 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             counts = counts,
             onSelect = { kindFilter = it },
             modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
-            compact = true,
         )
         HorizontalDivider()
 
@@ -184,7 +184,7 @@ private fun NodeRow(
             .clip(RoundedCornerShape(8.dp))
             .background(if (isSelected) Accent.copy(alpha = 0.14f) else Color.Transparent)
             .clickable(onClick = onClick)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
@@ -194,7 +194,7 @@ private fun NodeRow(
                 node.title,
                 style = MaterialTheme.typography.bodyMedium,
                 color = if (isSelected) Accent else TextPrimary,
-                maxLines = 1,
+                maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
             )
             Text(
