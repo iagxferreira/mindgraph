@@ -37,6 +37,24 @@ The MCP server lives inside the running app, so **the app must be open**:
 If tools fail with `ConnectionRefused`, the app is closed. If they fail with
 `NoClassDefFoundError`, see Traps below.
 
+## MCP client setup
+
+Claude can install the server with:
+
+```
+claude mcp add --transport http mindgraph http://127.0.0.1:4319/mcp
+```
+
+Codex can install the same server with:
+
+```
+codex mcp add mindgraph --url http://127.0.0.1:4319/mcp
+```
+
+Other agents should configure a Streamable HTTP MCP server named `mindgraph` at
+`http://127.0.0.1:4319/mcp`. If the agent cannot load Claude-style skills, treat this
+Markdown file as the project workflow instructions and follow the loop below exactly.
+
 ## The loop
 
 **1. Orient.** `list_ready_tasks` before deciding what to do. Readiness is computed
