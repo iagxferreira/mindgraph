@@ -5,6 +5,7 @@ import dev.mindgraph.storage.MemoryImport
 import dev.mindgraph.storage.NodeStore
 import dev.mindgraph.storage.SessionLog
 import dev.mindgraph.storage.Vault
+import dev.mindgraph.storage.toEdges
 import java.nio.file.Files
 import java.nio.file.Path
 import kotlin.test.Test
@@ -110,6 +111,34 @@ class MemoryImportIntoVaultTest {
         assertEquals(setOf("pr-workflow"), store.frontmatterValues(MemoryImport.KEY_MEMORY_NAME))
         assertEquals(setOf("session-pr-workflow"), store.frontmatterValues(MemoryImport.KEY_ORIGIN_SESSION))
         assertTrue(store.load().single().body.contains("[[a-link]]"), "wikilinks are carried verbatim")
+        model.scope.cancel()
+    }
+
+    @Test
+    fun anImportedNoteAnswersToTheNameItsSiblingsLinkItBy() = runBlocking {
+        val root = projectsRoot()
+        writeMemory(
+            root, "-home-iago-workspace-agni", "pr_workflow.md",
+            memoryFile("pr-workflow-kotlin-migration", "feedback", "A long sentence of a title", "Body"),
+        )
+        writeMemory(
+            root, "-home-iago-workspace-agni", "other.md",
+            memoryFile("other", "project", "Another note", "See [[pr-workflow-kotlin-migration]]"),
+        )
+        val (model, store) = newModel()
+
+        model.importClaudeMemoryNow(root)
+
+        val nodes = store.load()
+        val target = nodes.single { it.title == "A long sentence of a title" }
+        assertEquals(listOf("pr-workflow-kotlin-migration"), target.aliases)
+
+        // The point of the whole task: the link in the imported prose becomes a real edge.
+        val edges = nodes.toEdges()
+        assertTrue(
+            edges.any { it.targetId == target.id },
+            "the imported wikilink resolved into an edge",
+        )
         model.scope.cancel()
     }
 
