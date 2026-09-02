@@ -152,6 +152,7 @@ class NodeStore(private val vault: Vault) {
             archived = frontmatter.string(KEY_ARCHIVED)?.trim().equals("true", ignoreCase = true),
             assignee = frontmatter.string(KEY_ASSIGNEE)?.trim()?.takeIf { it.isNotEmpty() },
             aliases = readAliases(frontmatter),
+            originProject = frontmatter.string(KEY_ORIGIN_PROJECT)?.trim()?.takeIf { it.isNotEmpty() },
             task = status?.let {
                 TaskFacet(
                     status = it,
@@ -187,6 +188,7 @@ class NodeStore(private val vault: Vault) {
             if (node.aliases.isNotEmpty()) {
                 add("$KEY_ALIASES: [${node.aliases.joinToString(", ") { Frontmatter.quote(it) }}]")
             }
+            node.originProject?.let { add("$KEY_ORIGIN_PROJECT: ${Frontmatter.quote(it)}") }
             node.task?.let { facet ->
                 add("$KEY_STATUS: ${facet.status.name.lowercase()}")
                 facet.due?.let { add("$KEY_DUE: ${Frontmatter.quote(it)}") }
@@ -286,6 +288,7 @@ class NodeStore(private val vault: Vault) {
         const val KEY_ARCHIVED = "archived"
         const val KEY_ASSIGNEE = "assignee"
         const val KEY_ALIASES = "aliases"
+        const val KEY_ORIGIN_PROJECT = MemoryImport.KEY_ORIGIN_PROJECT
         const val KEY_STATUS = "status"
         const val KEY_DUE = "due"
         const val KEY_COMPLETED = "completed"
@@ -295,7 +298,8 @@ class NodeStore(private val vault: Vault) {
         const val KEY_UPDATED = "updated"
 
         val KNOWN_KEYS = setOf(
-            KEY_ID, KEY_TITLE, KEY_KIND, KEY_ARCHIVED, KEY_ASSIGNEE, KEY_ALIASES, KEY_STATUS, KEY_DUE, KEY_COMPLETED,
+            KEY_ID, KEY_TITLE, KEY_KIND, KEY_ARCHIVED, KEY_ASSIGNEE, KEY_ALIASES, KEY_ORIGIN_PROJECT,
+            KEY_STATUS, KEY_DUE, KEY_COMPLETED,
             KEY_DEPENDS_ON, KEY_RELATES_TO, KEY_CREATED, KEY_UPDATED,
         )
     }
