@@ -83,10 +83,12 @@ in a file you will notice later.
 | `list_ready_tasks` | What can actually be started now, ranked. The question to ask first |
 | `get_node` | Read one node in full when a ready-task summary is not enough |
 | `create_task` | Capture, with an optional deadline |
+| `create_note` | Capture what is *not* work — a note, RFC or reference, with no status |
+| `append_node_body` | Add to the end of a node. Only ever adds |
 | `link_nodes` | `depends_on` or `relates_to`. Cycles are refused |
 | `update_status` | `todo` / `doing` / `done` / `dropped`, and what the change unblocked |
 
-Five tools, kept deliberately few: every schema is sent on every request of every
+Seven tools, kept deliberately few: every schema is sent on every request of every
 session, so the surface is the loop — orient, capture, structure, close — and nothing
 else. Destructive and fiddly operations stay in the app, where you can see what you
 are doing.
