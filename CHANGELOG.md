@@ -6,6 +6,11 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **`search_notes` over MCP.** Agents can now scan the current vault by title, alias, or
+  body text and receive each match's id, title, kind, and bounded context snippet. It is
+  deliberately a straight scan rather than a cache, so external vault edits are visible on
+  the next call.
+
 - **Claude's plan documents import as RFC nodes.** `~/.claude/plans/*.md` are design
   documents already — context, decision, rationale — and land as `kind: rfc`, linked to
   what the vault knows about the project their title names. A project mentioned only in the
