@@ -95,12 +95,32 @@ data class Edge(
     val kind: EdgeKind,
 )
 
+/**
+ * Who spent the time. Recorded per stretch rather than per node, because the same task is
+ * usually worked by both — and a total that cannot separate them answers neither "how long did
+ * this take me" nor "how much of this did the machine do".
+ */
+enum class Worker {
+    Human, Agent;
+
+    val slug: String get() = name.lowercase()
+
+    companion object {
+        /** Anything unrecognised, including a log written before this existed, is human work. */
+        fun parse(raw: String?): Worker =
+            entries.find { it.slug.equals(raw?.trim(), ignoreCase = true) } ?: Human
+    }
+}
+
 /** One tracked stretch of work against a node. Appended to a log; never edited in place. */
 data class WorkSession(
     val nodeId: NodeId,
     val startedAtUnix: Long,
     val stoppedAtUnix: Long,
     val seconds: Long,
+    val worker: Worker = Worker.Human,
+    /** Which agent, when [worker] is [Worker.Agent]. Null for your own work. */
+    val agent: String? = null,
 )
 
 fun currentUnixTimestamp(): Long = System.currentTimeMillis() / 1000

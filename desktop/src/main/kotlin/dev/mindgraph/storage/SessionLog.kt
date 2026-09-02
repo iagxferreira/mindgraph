@@ -2,6 +2,7 @@ package dev.mindgraph.storage
 
 import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.WorkSession
+import dev.mindgraph.model.Worker
 import java.nio.file.Files
 import java.nio.file.StandardOpenOption
 import kotlinx.coroutines.Dispatchers
@@ -50,7 +51,9 @@ class SessionLog(private val vault: Vault) {
         append("\"node_id\":\"").append(session.nodeId.value).append("\",")
         append("\"started_at\":").append(session.startedAtUnix).append(",")
         append("\"stopped_at\":").append(session.stoppedAtUnix).append(",")
-        append("\"seconds\":").append(session.seconds)
+        append("\"seconds\":").append(session.seconds).append(",")
+        append("\"worker\":\"").append(session.worker.slug).append("\"")
+        session.agent?.let { append(",\"agent\":\"").append(escape(it)).append("\"") }
         append("}")
     }
 
@@ -67,8 +70,15 @@ class SessionLog(private val vault: Vault) {
             startedAtUnix = longField(trimmed, "started_at") ?: return null,
             stoppedAtUnix = longField(trimmed, "stopped_at") ?: return null,
             seconds = longField(trimmed, "seconds") ?: return null,
+            // Lines written before the log recorded a worker are yours, which is what they were.
+            worker = Worker.parse(stringField(trimmed, "worker")),
+            agent = stringField(trimmed, "agent"),
         )
     }
+
+    /** An agent names itself, so the name is arbitrary text and must not break the line. */
+    private fun escape(value: String): String =
+        value.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", " ")
 
     private fun stringField(line: String, key: String): String? =
         Regex("\"$key\"\\s*:\\s*\"([^\"]*)\"").find(line)?.groupValues?.get(1)
