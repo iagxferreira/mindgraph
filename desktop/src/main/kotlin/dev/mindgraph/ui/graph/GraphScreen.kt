@@ -45,6 +45,7 @@ import androidx.compose.foundation.layout.width
 import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.NodeKind
+import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.AppViewModel
 import dev.mindgraph.state.GraphFilter
 import dev.mindgraph.state.LayoutMode
@@ -93,7 +94,17 @@ fun GraphScreen(
     LaunchedEffect(mode, viewModel.nodes, viewModel.edges) {
         viewModel.layout.mode = mode
         if (mode == LayoutMode.Flow) {
-            viewModel.layout.setFlowRanks(graph.ranks().mapKeys { it.key.value })
+            val ranks = graph.ranks()
+            val terminalRank = (ranks.values.maxOrNull() ?: 0) + 1
+            viewModel.layout.setFlowRanks(
+                ranks.mapKeys { it.key.value }.mapValues { (id, rank) ->
+                    if (viewModel.nodeById(NodeId(id))?.task?.status == TaskStatus.Done) {
+                        terminalRank
+                    } else {
+                        rank
+                    }
+                },
+            )
         }
     }
 

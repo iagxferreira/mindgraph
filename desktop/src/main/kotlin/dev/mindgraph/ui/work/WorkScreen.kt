@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -34,13 +35,18 @@ import dev.mindgraph.state.NodeWork
 import dev.mindgraph.state.WorkSummary
 import dev.mindgraph.state.WorkerSplit
 import dev.mindgraph.ui.theme.Accent
+import dev.mindgraph.ui.theme.Blocked
 import dev.mindgraph.ui.theme.Border
+import dev.mindgraph.ui.theme.Done
 import dev.mindgraph.ui.theme.Ink
 import dev.mindgraph.ui.theme.Machine
+import dev.mindgraph.ui.theme.Overdue
 import dev.mindgraph.ui.theme.SurfaceHigh
 import dev.mindgraph.ui.theme.TextMuted
 import dev.mindgraph.ui.theme.TextPrimary
 import kotlin.math.roundToInt
+
+private val AgentColors = listOf(Accent, Machine, Done, Blocked, Overdue)
 
 /**
  * Where the time went, and whose it was.
@@ -59,6 +65,12 @@ fun WorkScreen(
     val agents = WorkSummary.byAgent(sessions)
     val total = WorkSummary.splitOf(sessions)
     val busiest = ranked.firstOrNull()?.split?.total ?: 0L
+    val agentColors = agents
+        .map { it.name ?: "unnamed agent" }
+        .distinct()
+        .sorted()
+        .mapIndexed { index, name -> name to AgentColors[index % AgentColors.size] }
+        .toMap()
 
     Column(modifier = modifier.fillMaxSize().background(Ink).padding(24.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -68,11 +80,23 @@ fun WorkScreen(
         }
 
         Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(IntrinsicSize.Min)
+                .padding(top = 16.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            StatCard("Total tracked", formatDuration(total.total), null, Modifier.weight(1f))
-            StatCard("Yours", formatDuration(total.human), null, Modifier.weight(1f), Accent)
+            StatCard(
+                label = "Total tracked",
+                value = formatDuration(total.total),
+                detail = if (total.total > 0) {
+                    "${formatDuration(total.human)} Yours  ·  ${formatDuration(total.agent)} Machine"
+                } else {
+                    null
+                },
+                modifier = Modifier.weight(1f).fillMaxHeight(),
+            )
+            StatCard("Yours", formatDuration(total.human), null, Modifier.weight(1f).fillMaxHeight(), Accent)
             StatCard(
                 label = "Machine",
                 value = formatDuration(total.agent),
@@ -81,29 +105,31 @@ fun WorkScreen(
                 } else {
                     null
                 },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).fillMaxHeight(),
                 tint = Machine,
             )
-            StatCard("Nodes worked", ranked.size.toString(), null, Modifier.weight(1f))
+            StatCard("Nodes worked", ranked.size.toString(), null, Modifier.weight(1f).fillMaxHeight())
         }
 
         if (agents.isNotEmpty()) {
-            SectionTitle("By agent")
+            SectionTitle("Contributors", "Time grouped by agent")
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 agents.forEach { agent ->
+                    val agentName = agent.name ?: "unnamed agent"
+                    val agentColor = agentColors[agentName] ?: Accent
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
+                            .clip(RoundedCornerShape(8.dp))
                             .background(SurfaceHigh)
-                            .padding(horizontal = 14.dp, vertical = 10.dp),
+                            .padding(horizontal = 14.dp, vertical = 9.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Swatch(Machine)
+                        Swatch(agentColor)
                         Spacer(Modifier.width(10.dp))
                         Text(
                             // An agent that never introduced itself still did the work.
-                            agent.name ?: "unnamed agent",
+                            agentName,
                             style = MaterialTheme.typography.bodyMedium,
                             color = TextPrimary,
                             modifier = Modifier.weight(1f),
@@ -111,14 +137,14 @@ fun WorkScreen(
                         Text(
                             formatDuration(agent.seconds),
                             style = MaterialTheme.typography.labelMedium,
-                            color = Machine,
+                            color = agentColor,
                         )
                     }
                 }
             }
         }
 
-        SectionTitle("By node")
+        SectionTitle("Activity by node", "Most tracked time first")
 
         if (ranked.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -136,6 +162,7 @@ fun WorkScreen(
                         node = row.node,
                         split = row.split,
                         fraction = if (busiest > 0) row.split.total.toFloat() / busiest else 0f,
+                        agentColors = agentColors,
                         onClick = { onOpenNode(row.node.id) },
                     )
                 }
@@ -145,20 +172,22 @@ fun WorkScreen(
 }
 
 @Composable
-private fun SectionTitle(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.titleSmall,
-        color = TextPrimary,
-        modifier = Modifier.padding(top = 24.dp, bottom = 8.dp),
-    )
+private fun SectionTitle(title: String, detail: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(top = 24.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        Text(title, style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+        Spacer(Modifier.width(10.dp))
+        Text(detail, style = MaterialTheme.typography.labelSmall, color = TextMuted)
+    }
 }
 
 @Composable
 private fun Legend() {
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-        LegendItem(Accent, "yours")
-        LegendItem(Machine, "machine")
+        LegendItem(Accent, "Yours")
+        LegendItem(Machine, "Machine")
     }
 }
 
@@ -185,9 +214,9 @@ private fun StatCard(
 ) {
     Column(
         modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(SurfaceHigh)
-            .border(1.dp, Border, RoundedCornerShape(12.dp))
+            .border(1.dp, Border, RoundedCornerShape(8.dp))
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
@@ -200,14 +229,20 @@ private fun StatCard(
 }
 
 @Composable
-private fun WorkRow(node: Node, split: WorkerSplit, fraction: Float, onClick: () -> Unit) {
+private fun WorkRow(
+    node: Node,
+    split: WorkerSplit,
+    fraction: Float,
+    agentColors: Map<String, Color>,
+    onClick: () -> Unit,
+) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(8.dp))
             .background(SurfaceHigh)
             .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 9.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -226,8 +261,7 @@ private fun WorkRow(node: Node, split: WorkerSplit, fraction: Float, onClick: ()
             )
         }
 
-        // One bar, two segments: length is this node against the busiest one, and the split
-        // inside it is who did the work.
+        // Length is this node against the busiest one; segments show who did the work.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -236,12 +270,31 @@ private fun WorkRow(node: Node, split: WorkerSplit, fraction: Float, onClick: ()
                 .background(Accent.copy(alpha = 0.12f)),
         ) {
             Row(modifier = Modifier.fillMaxWidth(fraction).fillMaxHeight()) {
-                val humanWeight = 1f - split.agentShare
-                if (humanWeight > 0f) {
-                    Box(modifier = Modifier.weight(humanWeight).fillMaxHeight().background(Accent))
+                if (split.human > 0) {
+                    Box(
+                        modifier = Modifier
+                            .weight(split.human.toFloat() / split.total.toFloat())
+                            .fillMaxHeight()
+                            .background(Accent),
+                    )
                 }
-                if (split.agentShare > 0f) {
-                    Box(modifier = Modifier.weight(split.agentShare).fillMaxHeight().background(Machine))
+                split.agents.entries
+                    .sortedBy { it.key ?: "" }
+                    .forEach { (name, seconds) ->
+                        Box(
+                            modifier = Modifier
+                                .weight(seconds.toFloat() / split.total.toFloat())
+                                .fillMaxHeight()
+                                .background(agentColors[name ?: "unnamed agent"] ?: Machine),
+                        )
+                    }
+                if (split.agent > 0 && split.agents.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .weight(split.agent.toFloat() / split.total.toFloat())
+                            .fillMaxHeight()
+                            .background(Machine),
+                    )
                 }
             }
         }
@@ -258,13 +311,14 @@ private fun WorkRow(node: Node, split: WorkerSplit, fraction: Float, onClick: ()
     }
 }
 
-/** Seconds matter here: an agent can finish a task faster than a minute. */
+/** Keep all meaningful units visible so short and long sessions remain precise. */
 private fun formatDuration(totalSeconds: Long): String {
     val hours = totalSeconds / 3600
     val minutes = (totalSeconds % 3600) / 60
-    return when {
-        hours > 0 -> "${hours}h ${minutes}m"
-        minutes > 0 -> "${minutes}m"
-        else -> "${totalSeconds}s"
-    }
+    val seconds = totalSeconds % 60
+    return buildList {
+        if (hours > 0) add("${hours}h")
+        if (minutes > 0) add("${minutes}m")
+        if (seconds > 0 || isEmpty()) add("${seconds}s")
+    }.joinToString(" ")
 }
