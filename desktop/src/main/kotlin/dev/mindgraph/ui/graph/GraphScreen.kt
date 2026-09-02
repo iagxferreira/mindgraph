@@ -46,12 +46,11 @@ import androidx.compose.foundation.layout.width
 import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.NodeKind
-import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.AppViewModel
+import dev.mindgraph.state.FlowForest
 import dev.mindgraph.state.GraphFilter
 import dev.mindgraph.state.Clustering
 import dev.mindgraph.state.LayoutMode
-import dev.mindgraph.state.TaskGraph
 import dev.mindgraph.ui.shell.KindFilterBar
 import dev.mindgraph.ui.theme.Accent
 import dev.mindgraph.ui.theme.Blocked
@@ -100,29 +99,26 @@ fun GraphScreen(
     // agree about what a group is, and they only do if they come from the same map.
     val clusterGroups = remember(visible.nodes) { Clustering.groups(visible.nodes) }
 
-    // Ranks for Flow come from the visible subgraph. Ranking over the whole vault would space
-    // the rows for a chain running through nodes that are not drawn, which reads as a gap.
-    // `graph` stays the full vault everywhere else on this screen: a node hidden by a filter
-    // still blocks what depends on it, and saying otherwise would be a lie about the work.
-    val visibleGraph = remember(visible.nodes) { TaskGraph(visible.nodes) }
+    // Flow does not draw the visible set at all. Its subject is the tasks that participate in
+    // a dependency, and the forest works out their positions as one decision, so it replaces
+    // both the node list and the layout rather than filtering what the other modes show.
+    val forest = remember(viewModel.nodes, hideDone, showArchived) {
+        FlowForest.build(viewModel.nodes, includeDone = !hideDone, includeArchived = showArchived)
+    }
+    val drawn = if (mode == LayoutMode.Flow) {
+        // Edges are re-derived over the forest's own nodes so a chain does not trail a line off
+        // to a task the mode deliberately does not draw.
+        GraphFilter.apply(forest.nodes, viewModel.edges, kind = null, includeArchived = true)
+    } else {
+        visible
+    }
 
-    LaunchedEffect(mode, visible.nodes, visible.edges) {
+    LaunchedEffect(mode, drawn.nodes, drawn.edges) {
         viewModel.layout.mode = mode
-        if (mode == LayoutMode.Cluster) {
-            viewModel.layout.setClusters(clusterGroups)
-        }
-        if (mode == LayoutMode.Flow) {
-            val ranks = visibleGraph.ranks()
-            val terminalRank = (ranks.values.maxOrNull() ?: 0) + 1
-            viewModel.layout.setFlowRanks(
-                ranks.mapKeys { it.key.value }.mapValues { (id, rank) ->
-                    if (viewModel.nodeById(NodeId(id))?.task?.status == TaskStatus.Done) {
-                        terminalRank
-                    } else {
-                        rank
-                    }
-                },
-            )
+        when (mode) {
+            LayoutMode.Cluster -> viewModel.layout.setClusters(clusterGroups)
+            LayoutMode.Flow -> viewModel.layout.setTargets(forest.positions)
+            LayoutMode.Mind -> Unit
         }
     }
 
@@ -135,8 +131,8 @@ fun GraphScreen(
 
     Box(modifier = modifier.fillMaxSize().background(Ink)) {
         GraphCanvas(
-            nodes = visible.nodes,
-            edges = visible.edges,
+            nodes = drawn.nodes,
+            edges = drawn.edges,
             graph = graph,
             layout = viewModel.layout,
             selectedNodeId = viewModel.selectedNodeId,
@@ -149,6 +145,7 @@ fun GraphScreen(
                 emptyMap()
             },
             showLabels = showLabels,
+            ghostIds = if (mode == LayoutMode.Flow) forest.ghosts else emptySet(),
             onSelectNode = { viewModel.selectNode(it) },
             onLinkTarget = { targetId ->
                 val sourceId = linkSourceId
@@ -165,16 +162,27 @@ fun GraphScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ModeToggle(mode = mode, onChange = { mode = it })
-            KindFilterBar(
-                selected = kindFilter,
-                counts = kindCounts,
-                onSelect = { kindFilter = it },
-            )
-            CountsPill(
-                nodeCount = visible.nodes.size,
-                edgeCount = visible.edges.size,
-                readyCount = graph.readyTasks().size,
-            )
+            if (mode == LayoutMode.Flow) {
+                // No kind filter here. Flow's subject is a dependency chain, and narrowing it
+                // to one kind would cut trees in half - which is the failure this mode was
+                // rewritten to stop making.
+                FlowCountsPill(
+                    taskCount = forest.nodes.size,
+                    looseCount = forest.looseTaskCount,
+                    ghostCount = forest.ghosts.size,
+                )
+            } else {
+                KindFilterBar(
+                    selected = kindFilter,
+                    counts = kindCounts,
+                    onSelect = { kindFilter = it },
+                )
+                CountsPill(
+                    nodeCount = visible.nodes.size,
+                    edgeCount = visible.edges.size,
+                    readyCount = graph.readyTasks().size,
+                )
+            }
         }
 
         Column(
@@ -214,6 +222,13 @@ fun GraphScreen(
             ActionDivider()
             FloatingAction(Icons.Outlined.Refresh, "Release pinned nodes") { viewModel.layout.unpinAll() }
             FloatingAction(Icons.Outlined.CenterFocusStrong, "Recenter view") { viewResetKey++ }
+        }
+
+        if (mode == LayoutMode.Flow && forest.isEmpty) {
+            FlowEmptyState(
+                looseCount = forest.looseTaskCount,
+                modifier = Modifier.align(Alignment.Center),
+            )
         }
 
         val selected = viewModel.nodeById(viewModel.selectedNodeId)
@@ -335,6 +350,71 @@ private fun ModeToggle(mode: LayoutMode, onChange: (LayoutMode) -> Unit) {
                 )
             }
         }
+    }
+}
+
+/**
+ * What Flow is showing and, as importantly, what it is leaving out.
+ *
+ * The mode draws a deliberate minority of the vault, so the count of what it dropped belongs on
+ * screen. Silently showing 15 nodes out of 104 is how the old layout hid its own problem.
+ */
+@Composable
+private fun FlowCountsPill(taskCount: Int, looseCount: Int, ghostCount: Int) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(SurfaceHigh)
+            .border(1.dp, Border, RoundedCornerShape(10.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            "$taskCount task${if (taskCount == 1) "" else "s"} in chains",
+            style = MaterialTheme.typography.labelSmall,
+            color = TextPrimary,
+        )
+        if (ghostCount > 0) {
+            Text("$ghostCount done", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+        }
+        if (looseCount > 0) {
+            Text(
+                "$looseCount unlinked hidden",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextMuted,
+            )
+        }
+    }
+}
+
+/**
+ * A blank canvas reads as a broken tab. If nothing depends on anything there is nothing for
+ * Flow to draw, and saying so is more useful than leaving the user to guess.
+ */
+@Composable
+private fun FlowEmptyState(looseCount: Int, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .widthIn(max = 380.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(SurfaceHigh)
+            .border(1.dp, Border, RoundedCornerShape(12.dp))
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Nothing depends on anything yet", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+        Text(
+            if (looseCount > 0) {
+                "Flow draws the trees formed by dependencies between tasks. " +
+                    "$looseCount task${if (looseCount == 1) " has" else "s have"} no dependency " +
+                    "either way. Select a task and use Link · Depends on it to start a chain."
+            } else {
+                "Flow draws the trees formed by dependencies between tasks. " +
+                    "Create a task, then link it to what it is waiting on."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = TextMuted,
+        )
     }
 }
 
