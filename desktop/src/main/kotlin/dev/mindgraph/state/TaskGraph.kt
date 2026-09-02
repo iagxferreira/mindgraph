@@ -28,12 +28,12 @@ class TaskGraph(private val nodes: List<Node>) {
 
     /** Open work upstream of this node. Non-tasks never block — a reference note isn't a gate. */
     fun blockers(nodeId: NodeId): List<Node> =
-        dependencies(nodeId).filter { it.task?.status?.isOpen == true }
+        dependencies(nodeId).filter { it.isLiveWork }
 
     fun isBlocked(nodeId: NodeId): Boolean = blockers(nodeId).isNotEmpty()
 
     fun isReady(node: Node): Boolean =
-        node.task?.status == TaskStatus.Todo && !isBlocked(node.id)
+        !node.archived && node.task?.status == TaskStatus.Todo && !isBlocked(node.id)
 
     fun readyTasks(): List<Node> = nodes.filter(::isReady)
 
@@ -78,7 +78,7 @@ class TaskGraph(private val nodes: List<Node>) {
             if (!seen.add(next)) continue
             dependents(next).forEach { queue.addLast(it.id) }
         }
-        return seen.count { byId[it]?.task?.status?.isOpen == true }
+        return seen.count { byId[it]?.isLiveWork == true }
     }
 
     /**

@@ -16,10 +16,17 @@ data class VisibleGraph(val nodes: List<Node>, val edges: List<Edge>)
  */
 object GraphFilter {
 
-    fun apply(nodes: List<Node>, edges: List<Edge>, kind: NodeKind?): VisibleGraph {
-        if (kind == null) return VisibleGraph(nodes, edges)
+    fun apply(
+        nodes: List<Node>,
+        edges: List<Edge>,
+        kind: NodeKind?,
+        includeArchived: Boolean = false,
+    ): VisibleGraph {
+        if (kind == null && includeArchived) return VisibleGraph(nodes, edges)
 
-        val visible = nodes.filter { it.kind == kind }
+        val visible = nodes.filter {
+            (kind == null || it.kind == kind) && (includeArchived || !it.archived)
+        }
         val ids = visible.mapTo(HashSet()) { it.id }
         // An edge needs both ends: half an edge is a line trailing off to nothing.
         return VisibleGraph(visible, edges.filter { it.sourceId in ids && it.targetId in ids })

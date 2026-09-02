@@ -199,6 +199,21 @@ class AppViewModel(
         return saved
     }
 
+    /**
+     * Puts a node away, or brings it back. Nothing is deleted: the file keeps its id, its
+     * links and its tracked time, and stops appearing in work that is still live.
+     */
+    fun setArchived(nodeId: NodeId, archived: Boolean) {
+        scope.launch {
+            val node = nodeById(nodeId) ?: return@launch
+            if (node.archived == archived) return@launch
+            if (archived && runningNodeId == nodeId) stopWorkNow(nodeId)
+            store.save(node.copy(archived = archived))
+            refresh()
+            statusMessage = if (archived) "Archived" else "Restored"
+        }
+    }
+
     /** Changes what a document is. Task-ness is separate, so this never touches the facet. */
     fun setKind(nodeId: NodeId, kind: NodeKind) {
         scope.launch {
