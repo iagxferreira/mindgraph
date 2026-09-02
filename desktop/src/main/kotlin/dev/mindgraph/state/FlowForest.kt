@@ -55,9 +55,16 @@ object FlowForest {
     /**
      * @param includeDone when false, finished tasks are kept as ghosts rather than dropped,
      *   so a tree does not lose its interior.
+     * @param includeArchived archived work is left out by default. Archiving stops a task
+     *   blocking its dependents, so an archived node is not part of an order of work — but the
+     *   toggle stays live here rather than sitting inert on a tab where it does nothing.
      */
-    fun build(nodes: List<Node>, includeDone: Boolean = true): Layout {
-        val tasks = nodes.filter { it.isTask && !it.archived }
+    fun build(
+        nodes: List<Node>,
+        includeDone: Boolean = true,
+        includeArchived: Boolean = false,
+    ): Layout {
+        val tasks = nodes.filter { it.isTask && (includeArchived || !it.archived) }
         val byId = tasks.associateBy { it.id }
 
         // Only task-to-task dependencies shape Flow. A task depending on a plain note would
