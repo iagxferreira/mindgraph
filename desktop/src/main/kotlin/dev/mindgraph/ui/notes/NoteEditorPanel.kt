@@ -144,6 +144,24 @@ fun NoteEditorPanel(
                     Text("Make this a task", style = MaterialTheme.typography.labelMedium, color = Accent)
                 }
             }
+
+            Spacer(Modifier.weight(1f))
+            TextButton(onClick = { viewModel.setArchived(node.id, !node.archived) }) {
+                Text(
+                    if (node.archived) "Restore" else "Archive",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (node.archived) Accent else TextMuted,
+                )
+            }
+        }
+
+        if (node.archived) {
+            Text(
+                "Archived — kept, but out of the graph and out of ready work.",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextMuted,
+                modifier = Modifier.padding(horizontal = 20.dp).padding(bottom = 8.dp),
+            )
         }
 
         if (blockers.isNotEmpty()) {
