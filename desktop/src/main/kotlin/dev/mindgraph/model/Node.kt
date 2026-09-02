@@ -35,6 +35,12 @@ data class Node(
      */
     val aliases: List<String> = emptyList(),
     /**
+     * The repository a node was imported from, when it came from one. Absent for everything
+     * written here, which is the distinction the cluster layout draws: work you did in this
+     * vault, versus context carried in from somewhere else.
+     */
+    val originProject: String? = null,
+    /**
      * Put away, but kept. Archiving is about visibility, not outcome — which is why it is not
      * a fifth [TaskStatus]: archiving a finished task must not overwrite the fact that it was
      * finished rather than abandoned.

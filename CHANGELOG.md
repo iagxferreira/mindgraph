@@ -6,6 +6,10 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **A Cluster layout mode**, grouping the graph by the repository each node was imported
+  from, with every group named on the canvas. Nodes written in the vault itself group as
+  "This vault", which is the split that matters once other projects' notes are in.
+
 - **`search_notes` over MCP.** Agents can now scan the current vault by title, alias, or
   body text and receive each match's id, title, kind, and bounded context snippet. It is
   deliberately a straight scan rather than a cache, so external vault edits are visible on
