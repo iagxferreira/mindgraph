@@ -7,6 +7,7 @@ import dev.mindgraph.model.Edge
 import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
+import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskFacet
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.model.WorkSession
@@ -196,6 +197,17 @@ class AppViewModel(
 
         statusMessage = "Marked ${status.name.lowercase()}"
         return saved
+    }
+
+    /** Changes what a document is. Task-ness is separate, so this never touches the facet. */
+    fun setKind(nodeId: NodeId, kind: NodeKind) {
+        scope.launch {
+            val node = nodeById(nodeId) ?: return@launch
+            if (node.kind == kind) return@launch
+            store.save(node.copy(kind = kind))
+            refresh()
+            statusMessage = "Now a ${kind.name.lowercase()}"
+        }
     }
 
     /**

@@ -1,5 +1,6 @@
 package dev.mindgraph.ui.notes
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -23,6 +24,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -31,8 +36,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
+import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.AppViewModel
+import dev.mindgraph.ui.shell.KindFilterBar
+import dev.mindgraph.ui.shell.KindGlyph
+import dev.mindgraph.ui.shell.label
 import dev.mindgraph.ui.theme.Accent
 import dev.mindgraph.ui.theme.Blocked
 import dev.mindgraph.ui.theme.Done
@@ -77,9 +86,20 @@ fun NotesScreen(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     val graph = viewModel.graph
+    var kindFilter by remember { mutableStateOf<NodeKind?>(null) }
+
+    val counts = viewModel.nodes.groupingBy { it.kind }.eachCount()
+    // Grouped rather than filtered-by-default: the whole vault stays visible, but a run of
+    // notes no longer hides the four RFCs sitting among them.
+    val sections = NodeKind.entries
+        .filter { kindFilter == null || it == kindFilter }
+        .mapNotNull { kind ->
+            viewModel.nodes.filter { it.kind == kind }.takeIf { it.isNotEmpty() }?.let { kind to it }
+        }
 
     Column(modifier = modifier.background(Surface)) {
         Row(
@@ -94,18 +114,51 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             )
             TextButton(onClick = { viewModel.createNode() }) { Text("New", color = Accent) }
         }
+        KindFilterBar(
+            selected = kindFilter,
+            counts = counts,
+            onSelect = { kindFilter = it },
+            modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
+        )
         HorizontalDivider()
+
         LazyColumn(modifier = Modifier.fillMaxSize()) {
-            items(viewModel.nodes, key = { it.id.value }) { node ->
-                NodeRow(
-                    node = node,
-                    isSelected = node.id == viewModel.selectedNodeId,
-                    isBlocked = node.isTask && graph.isBlocked(node.id),
-                    trackedSeconds = viewModel.trackedSecondsFor(node.id),
-                    onClick = { viewModel.selectNode(node.id) },
-                )
+            sections.forEach { (kind, nodes) ->
+                stickyHeader(key = "header-${kind.name}") {
+                    SectionHeader(kind = kind, count = nodes.size)
+                }
+                items(nodes, key = { it.id.value }) { node ->
+                    NodeRow(
+                        node = node,
+                        isSelected = node.id == viewModel.selectedNodeId,
+                        isBlocked = node.isTask && graph.isBlocked(node.id),
+                        trackedSeconds = viewModel.trackedSecondsFor(node.id),
+                        onClick = { viewModel.selectNode(node.id) },
+                    )
+                }
             }
         }
+    }
+}
+
+@Composable
+private fun SectionHeader(kind: NodeKind, count: Int) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Surface)
+            .padding(start = 14.dp, end = 14.dp, top = 12.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(7.dp),
+    ) {
+        KindGlyph(kind, TextMuted, size = 7.dp)
+        Text(
+            kind.label.uppercase(),
+            style = MaterialTheme.typography.labelSmall,
+            color = TextMuted,
+            modifier = Modifier.weight(1f),
+        )
+        Text(count.toString(), style = MaterialTheme.typography.labelSmall, color = TextMuted)
     }
 }
 
