@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -45,8 +46,8 @@ import androidx.compose.foundation.layout.width
 import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.NodeKind
-import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.AppViewModel
+import dev.mindgraph.state.FlowForest
 import dev.mindgraph.state.GraphFilter
 import dev.mindgraph.state.Clustering
 import dev.mindgraph.state.LayoutMode
@@ -78,11 +79,13 @@ fun GraphScreen(
     var kindFilter by remember { mutableStateOf<NodeKind?>(null) }
     var showArchived by remember { mutableStateOf(false) }
     var hideDone by remember { mutableStateOf(false) }
+    var showLabels by remember { mutableStateOf(true) }
 
     val graph = viewModel.graph
 
-    // Filtering hides nodes; it never moves them. Positions stay the layout's business, so a
-    // node is where you left it when the filter comes back off.
+    // Filtering decides how many nodes there are, and the layout is built from that count, so
+    // the engine is driven with the visible set rather than the vault. Hiding a node therefore
+    // rebuilds the picture around what is left instead of leaving a hole where it used to sit.
     val visible = GraphFilter.apply(
         viewModel.nodes,
         viewModel.edges,
@@ -96,30 +99,40 @@ fun GraphScreen(
     // agree about what a group is, and they only do if they come from the same map.
     val clusterGroups = remember(visible.nodes) { Clustering.groups(visible.nodes) }
 
-    LaunchedEffect(mode, viewModel.nodes, viewModel.edges) {
+    // Flow does not draw the visible set at all. Its subject is the tasks that participate in
+    // a dependency, and the forest works out their positions as one decision, so it replaces
+    // both the node list and the layout rather than filtering what the other modes show.
+    val forest = remember(viewModel.nodes, hideDone, showArchived) {
+        FlowForest.build(viewModel.nodes, includeDone = !hideDone, includeArchived = showArchived)
+    }
+    val drawn = if (mode == LayoutMode.Flow) {
+        // Edges are re-derived over the forest's own nodes so a chain does not trail a line off
+        // to a task the mode deliberately does not draw.
+        GraphFilter.apply(forest.nodes, viewModel.edges, kind = null, includeArchived = true)
+    } else {
+        visible
+    }
+
+    LaunchedEffect(mode, drawn.nodes, drawn.edges) {
         viewModel.layout.mode = mode
-        if (mode == LayoutMode.Cluster) {
-            viewModel.layout.setClusters(clusterGroups)
+        when (mode) {
+            LayoutMode.Cluster -> viewModel.layout.setClusters(clusterGroups)
+            LayoutMode.Flow -> viewModel.layout.setTargets(forest.positions)
+            LayoutMode.Mind -> Unit
         }
-        if (mode == LayoutMode.Flow) {
-            val ranks = graph.ranks()
-            val terminalRank = (ranks.values.maxOrNull() ?: 0) + 1
-            viewModel.layout.setFlowRanks(
-                ranks.mapKeys { it.key.value }.mapValues { (id, rank) ->
-                    if (viewModel.nodeById(NodeId(id))?.task?.status == TaskStatus.Done) {
-                        terminalRank
-                    } else {
-                        rank
-                    }
-                },
-            )
-        }
+    }
+
+    // Keyed on the filters themselves rather than on the resulting node list: a filter toggle
+    // is a request to rebuild the picture, whereas an agent writing a node over MCP is not, and
+    // scrambling the canvas under someone every time the vault changes would be its own bug.
+    LaunchedEffect(kindFilter, showArchived, hideDone) {
+        viewModel.layout.reflow()
     }
 
     Box(modifier = modifier.fillMaxSize().background(Ink)) {
         GraphCanvas(
-            nodes = visible.nodes,
-            edges = visible.edges,
+            nodes = drawn.nodes,
+            edges = drawn.edges,
             graph = graph,
             layout = viewModel.layout,
             selectedNodeId = viewModel.selectedNodeId,
@@ -131,6 +144,8 @@ fun GraphScreen(
             } else {
                 emptyMap()
             },
+            showLabels = showLabels,
+            ghostIds = if (mode == LayoutMode.Flow) forest.ghosts else emptySet(),
             onSelectNode = { viewModel.selectNode(it) },
             onLinkTarget = { targetId ->
                 val sourceId = linkSourceId
@@ -147,16 +162,27 @@ fun GraphScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ModeToggle(mode = mode, onChange = { mode = it })
-            KindFilterBar(
-                selected = kindFilter,
-                counts = kindCounts,
-                onSelect = { kindFilter = it },
-            )
-            CountsPill(
-                nodeCount = visible.nodes.size,
-                edgeCount = visible.edges.size,
-                readyCount = graph.readyTasks().size,
-            )
+            if (mode == LayoutMode.Flow) {
+                // No kind filter here. Flow's subject is a dependency chain, and narrowing it
+                // to one kind would cut trees in half - which is the failure this mode was
+                // rewritten to stop making.
+                FlowCountsPill(
+                    taskCount = forest.nodes.size,
+                    looseCount = forest.looseTaskCount,
+                    ghostCount = forest.ghosts.size,
+                )
+            } else {
+                KindFilterBar(
+                    selected = kindFilter,
+                    counts = kindCounts,
+                    onSelect = { kindFilter = it },
+                )
+                CountsPill(
+                    nodeCount = visible.nodes.size,
+                    edgeCount = visible.edges.size,
+                    readyCount = graph.readyTasks().size,
+                )
+            }
         }
 
         Column(
@@ -186,9 +212,23 @@ fun GraphScreen(
                 description = if (hideDone) "Show done tasks" else "Hide done tasks",
                 isActive = hideDone,
             ) { hideDone = !hideDone }
+            FloatingAction(
+                icon = Icons.Outlined.TextFields,
+                description = if (showLabels) "Hide node labels" else "Show node labels",
+                // Active means "this control is changing the picture", which for the other
+                // toggles is their true state and here is the off state.
+                isActive = !showLabels,
+            ) { showLabels = !showLabels }
             ActionDivider()
             FloatingAction(Icons.Outlined.Refresh, "Release pinned nodes") { viewModel.layout.unpinAll() }
             FloatingAction(Icons.Outlined.CenterFocusStrong, "Recenter view") { viewResetKey++ }
+        }
+
+        if (mode == LayoutMode.Flow && forest.isEmpty) {
+            FlowEmptyState(
+                looseCount = forest.looseTaskCount,
+                modifier = Modifier.align(Alignment.Center),
+            )
         }
 
         val selected = viewModel.nodeById(viewModel.selectedNodeId)
@@ -310,6 +350,71 @@ private fun ModeToggle(mode: LayoutMode, onChange: (LayoutMode) -> Unit) {
                 )
             }
         }
+    }
+}
+
+/**
+ * What Flow is showing and, as importantly, what it is leaving out.
+ *
+ * The mode draws a deliberate minority of the vault, so the count of what it dropped belongs on
+ * screen. Silently showing 15 nodes out of 104 is how the old layout hid its own problem.
+ */
+@Composable
+private fun FlowCountsPill(taskCount: Int, looseCount: Int, ghostCount: Int) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(10.dp))
+            .background(SurfaceHigh)
+            .border(1.dp, Border, RoundedCornerShape(10.dp))
+            .padding(horizontal = 14.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        Text(
+            "$taskCount task${if (taskCount == 1) "" else "s"} in chains",
+            style = MaterialTheme.typography.labelSmall,
+            color = TextPrimary,
+        )
+        if (ghostCount > 0) {
+            Text("$ghostCount done", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+        }
+        if (looseCount > 0) {
+            Text(
+                "$looseCount unlinked hidden",
+                style = MaterialTheme.typography.labelSmall,
+                color = TextMuted,
+            )
+        }
+    }
+}
+
+/**
+ * A blank canvas reads as a broken tab. If nothing depends on anything there is nothing for
+ * Flow to draw, and saying so is more useful than leaving the user to guess.
+ */
+@Composable
+private fun FlowEmptyState(looseCount: Int, modifier: Modifier = Modifier) {
+    Column(
+        modifier = modifier
+            .widthIn(max = 380.dp)
+            .clip(RoundedCornerShape(12.dp))
+            .background(SurfaceHigh)
+            .border(1.dp, Border, RoundedCornerShape(12.dp))
+            .padding(18.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text("Nothing depends on anything yet", style = MaterialTheme.typography.titleSmall, color = TextPrimary)
+        Text(
+            if (looseCount > 0) {
+                "Flow draws the trees formed by dependencies between tasks. " +
+                    "$looseCount task${if (looseCount == 1) " has" else "s have"} no dependency " +
+                    "either way. Select a task and use Link · Depends on it to start a chain."
+            } else {
+                "Flow draws the trees formed by dependencies between tasks. " +
+                    "Create a task, then link it to what it is waiting on."
+            },
+            style = MaterialTheme.typography.bodySmall,
+            color = TextMuted,
+        )
     }
 }
 

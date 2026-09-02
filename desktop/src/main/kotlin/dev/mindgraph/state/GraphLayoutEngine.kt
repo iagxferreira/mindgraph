@@ -2,7 +2,6 @@ package dev.mindgraph.state
 
 import androidx.compose.runtime.mutableStateMapOf
 import dev.mindgraph.model.Edge
-import dev.mindgraph.model.EdgeKind
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -54,6 +53,36 @@ class GraphLayoutEngine {
         pinned.clear()
     }
 
+    /**
+     * Throws every unpinned node back to a fresh seed position so the next run of the layout
+     * builds the picture for the nodes that are actually on screen.
+     *
+     * Filtering changes how many nodes there are, and a layout is a statement about a count:
+     * ring sizes, rank rows and the spread of the force sim are all derived from it. Leaving
+     * survivors where they were keeps holes where the hidden nodes used to sit and settles out
+     * of the old shape rather than into the new one.
+     *
+     * Pinned nodes are left exactly where they are. A pin is a position a person chose by
+     * dragging, and hiding some other node is not a reason to throw that away.
+     *
+     * Seeding here rather than leaving it to [sync] keeps the two independent of each other:
+     * whichever runs first, every node still ends up with a position, so nothing can be
+     * dropped from the canvas for a frame.
+     */
+    fun reflow() {
+        for (id in nodeIds) {
+            if (id in pinned) continue
+            positions[id] = seedPosition()
+            velocities[id] = Vec2(0f, 0f)
+        }
+    }
+
+    private fun seedPosition(): Vec2 {
+        val angle = random.nextDouble(0.0, 2 * Math.PI)
+        val radius = 80.0 + random.nextDouble(0.0, 140.0)
+        return Vec2((cos(angle) * radius).toFloat(), (sin(angle) * radius).toFloat())
+    }
+
     fun sync(ids: List<String>, edges: List<Edge>) {
         val idSet = ids.toSet()
         positions.keys.retainAll(idSet)
@@ -62,9 +91,7 @@ class GraphLayoutEngine {
         targets.keys.retainAll(idSet)
         for (id in ids) {
             if (id !in positions) {
-                val angle = random.nextDouble(0.0, 2 * Math.PI)
-                val radius = 80.0 + random.nextDouble(0.0, 140.0)
-                positions[id] = Vec2((cos(angle) * radius).toFloat(), (sin(angle) * radius).toFloat())
+                positions[id] = seedPosition()
                 velocities[id] = Vec2(0f, 0f)
             }
         }
@@ -72,43 +99,17 @@ class GraphLayoutEngine {
         this.edges = edges
     }
 
-    /** Places prerequisites above their dependents, centering each prerequisite over its branch. */
-    fun setFlowRanks(ranks: Map<String, Int>) {
+    /**
+     * Positions computed elsewhere for a mode that places rather than simulates.
+     *
+     * Flow works out a whole forest of trees at once — depth, centring and the packing of one
+     * tree against the next are a single decision, not something the engine can derive from a
+     * rank per node — so it hands the finished positions over and the engine only eases toward
+     * them.
+     */
+    fun setTargets(positions: Map<String, Vec2>) {
         targets.clear()
-        if (ranks.isEmpty()) return
-
-        val nodeSpacing = 180f
-        val rowHeight = 150f
-        val dependencies = edges
-            .filter { it.kind == EdgeKind.DependsOn }
-            .groupBy({ it.targetId.value }, { it.sourceId.value })
-            .mapValues { (_, children) -> children.distinct().sorted() }
-        val parentIds = dependencies.values.flatten().toSet()
-        val roots = ranks.keys.filter { it !in parentIds }.sorted()
-        val xPositions = HashMap<String, Float>()
-        var leafCursor = 0
-
-        fun place(id: String): Float {
-            xPositions[id]?.let { return it }
-            val children = dependencies[id].orEmpty()
-            val x = if (children.isEmpty()) {
-                leafCursor++ * nodeSpacing
-            } else {
-                children.map(::place).average().toFloat()
-            }
-            xPositions[id] = x
-            return x
-        }
-
-        roots.forEach(::place)
-        ranks.keys.filter { it !in xPositions }.sorted().forEach(::place)
-
-        val centerX = ((xPositions.values.minOrNull() ?: 0f) + (xPositions.values.maxOrNull() ?: 0f)) / 2f
-        val maxRank = ranks.values.maxOrNull() ?: 0
-        val centerY = maxRank * rowHeight / 2f
-        xPositions.forEach { (id, x) ->
-            targets[id] = Vec2(x - centerX, (ranks[id] ?: 0) * rowHeight - centerY)
-        }
+        targets.putAll(positions)
     }
 
     /**

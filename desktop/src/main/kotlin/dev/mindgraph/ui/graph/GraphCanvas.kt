@@ -64,6 +64,18 @@ fun GraphCanvas(
     trackedSecondsFor: (NodeId) -> Long,
     /** Group name to the centre it was laid out around; empty in every mode but Cluster. */
     clusterLabels: Map<String, Vec2> = emptyMap(),
+    /**
+     * Whether to draw each node's title under it. Off is for reading the shape of the graph
+     * rather than its contents: at vault scale the titles overlap into noise, and the selected
+     * node's card still names whatever you click, so nothing becomes unidentifiable.
+     */
+    showLabels: Boolean = true,
+    /**
+     * Nodes drawn as evidence rather than as work: finished tasks held in a Flow tree so it
+     * keeps its shape. Faded and shrunk, so they read as the past of the chain rather than as
+     * something waiting to be picked up.
+     */
+    ghostIds: Set<NodeId> = emptySet(),
     onSelectNode: (NodeId) -> Unit,
     onLinkTarget: (NodeId) -> Unit,
     modifier: Modifier = Modifier,
@@ -171,13 +183,25 @@ fun GraphCanvas(
             val emphasized = isSelected || isLinkSource
             val blocked = node.isTask && graph.isBlocked(node.id)
             val hue = nodeHue(node, blocked)
+            val isGhost = node.id in ghostIds && !emphasized
 
             drawNodeShape(
                 kind = node.kind,
                 center = screen,
-                radius = radius,
-                fill = hue.copy(alpha = if (emphasized) 0.42f else 0.16f),
-                stroke = if (emphasized) hue else hue.copy(alpha = 0.7f),
+                // Smaller as well as fainter. Tracked time sets the radius, and finished work
+                // has the most of it, so fading alone would leave the biggest circles on the
+                // canvas belonging to the nodes that matter least.
+                radius = if (isGhost) radius * GHOST_SCALE else radius,
+                fill = when {
+                    isGhost -> hue.copy(alpha = 0.06f)
+                    emphasized -> hue.copy(alpha = 0.42f)
+                    else -> hue.copy(alpha = 0.16f)
+                },
+                stroke = when {
+                    isGhost -> hue.copy(alpha = 0.28f)
+                    emphasized -> hue
+                    else -> hue.copy(alpha = 0.7f)
+                },
                 strokeStyle = Stroke(
                     width = if (emphasized) 3f else 1.6f,
                     pathEffect = when {
@@ -188,20 +212,27 @@ fun GraphCanvas(
                 ),
             )
 
-            val labelText = if (layout.mode == dev.mindgraph.state.LayoutMode.Flow) {
-                node.title.take(24).let { if (node.title.length > 24) "$it..." else it }
-            } else {
-                node.title
-            }
-            val label = textMeasurer.measure(
-                text = labelText,
-                style = TextStyle(color = TextPrimary, fontSize = 12.sp),
-            )
-            if (layout.mode != dev.mindgraph.state.LayoutMode.Flow || zoom >= 0.7f || emphasized) {
-                drawText(
-                    textLayoutResult = label,
-                    topLeft = Offset(screen.x - label.size.width / 2f, screen.y + radius + 4f),
+            // Measuring is the expensive half, so the check wraps it rather than just the draw:
+            // with labels off there is no reason to lay out text for every node every frame.
+            if (showLabels) {
+                val labelText = if (layout.mode == dev.mindgraph.state.LayoutMode.Flow) {
+                    node.title.take(24).let { if (node.title.length > 24) "$it..." else it }
+                } else {
+                    node.title
+                }
+                val label = textMeasurer.measure(
+                    text = labelText,
+                    style = TextStyle(
+                        color = if (isGhost) TextMuted.copy(alpha = 0.5f) else TextPrimary,
+                        fontSize = 12.sp,
+                    ),
                 )
+                if (layout.mode != dev.mindgraph.state.LayoutMode.Flow || zoom >= 0.7f || emphasized) {
+                    drawText(
+                        textLayoutResult = label,
+                        topLeft = Offset(screen.x - label.size.width / 2f, screen.y + radius + 4f),
+                    )
+                }
             }
         }
     }
@@ -254,6 +285,9 @@ private fun nodeHue(node: Node, blocked: Boolean): Color = when {
     node.task?.status == TaskStatus.Done -> Done
     else -> Accent
 }
+
+/** How much of its normal size a ghost keeps. Small enough to recede, large enough to trace. */
+private const val GHOST_SCALE = 0.6f
 
 private fun nodeRadius(trackedSeconds: Long): Float {
     val minutes = trackedSeconds / 60f
