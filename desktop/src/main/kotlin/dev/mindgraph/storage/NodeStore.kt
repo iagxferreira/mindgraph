@@ -133,6 +133,7 @@ class NodeStore(private val vault: Vault) {
             kind = NodeKind.parse(frontmatter.string(KEY_KIND)) ?: NodeKind.Note,
             archived = frontmatter.string(KEY_ARCHIVED)?.trim().equals("true", ignoreCase = true),
             assignee = frontmatter.string(KEY_ASSIGNEE)?.trim()?.takeIf { it.isNotEmpty() },
+            aliases = readAliases(frontmatter),
             task = status?.let {
                 TaskFacet(
                     status = it,
@@ -165,6 +166,9 @@ class NodeStore(private val vault: Vault) {
             // is false almost always.
             if (node.archived) add("$KEY_ARCHIVED: true")
             node.assignee?.let { add("$KEY_ASSIGNEE: ${Frontmatter.quote(it)}") }
+            if (node.aliases.isNotEmpty()) {
+                add("$KEY_ALIASES: [${node.aliases.joinToString(", ") { Frontmatter.quote(it) }}]")
+            }
             node.task?.let { facet ->
                 add("$KEY_STATUS: ${facet.status.name.lowercase()}")
                 facet.due?.let { add("$KEY_DUE: ${Frontmatter.quote(it)}") }
@@ -185,6 +189,19 @@ class NodeStore(private val vault: Vault) {
         val document = lines.joinToString("\n") + "\n\n" + node.body.trimStart('\n')
         writeAtomically(path, document)
     }
+
+    /**
+     * Aliases come from [KEY_ALIASES], plus [MemoryImport.KEY_MEMORY_NAME] when it is there.
+     *
+     * The importer wrote only the memory name before aliases existed, and those notes are
+     * already in people's vaults — re-importing would not reach them, because the import skips
+     * anything it has seen. Reading both is what makes those links resolve without a migration.
+     */
+    private fun readAliases(frontmatter: Frontmatter): List<String> =
+        (frontmatter.list(KEY_ALIASES) + listOfNotNull(frontmatter.string(MemoryImport.KEY_MEMORY_NAME)))
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .distinct()
 
     private fun existingExtras(path: Path): Map<String, Frontmatter.Value> {
         if (!Files.exists(path)) return emptyMap()
@@ -250,6 +267,7 @@ class NodeStore(private val vault: Vault) {
         const val KEY_KIND = "kind"
         const val KEY_ARCHIVED = "archived"
         const val KEY_ASSIGNEE = "assignee"
+        const val KEY_ALIASES = "aliases"
         const val KEY_STATUS = "status"
         const val KEY_DUE = "due"
         const val KEY_COMPLETED = "completed"
@@ -259,7 +277,7 @@ class NodeStore(private val vault: Vault) {
         const val KEY_UPDATED = "updated"
 
         val KNOWN_KEYS = setOf(
-            KEY_ID, KEY_TITLE, KEY_KIND, KEY_ARCHIVED, KEY_ASSIGNEE, KEY_STATUS, KEY_DUE, KEY_COMPLETED,
+            KEY_ID, KEY_TITLE, KEY_KIND, KEY_ARCHIVED, KEY_ASSIGNEE, KEY_ALIASES, KEY_STATUS, KEY_DUE, KEY_COMPLETED,
             KEY_DEPENDS_ON, KEY_RELATES_TO, KEY_CREATED, KEY_UPDATED,
         )
     }
