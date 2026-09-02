@@ -3,6 +3,7 @@ package dev.mindgraph.mcp
 import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
+import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.LinkOutcome
 import dev.mindgraph.state.TaskGraph
@@ -36,6 +37,12 @@ class McpTool(
  */
 interface VaultAccess {
     suspend fun createTask(title: String, body: String, due: String?, assignee: String?): Node
+
+    /**
+     * A document with no task facet. [kind] is what the document *is*; task-ness is the other
+     * axis entirely, and a node created here has neither a status nor a place in the ready queue.
+     */
+    suspend fun createNote(title: String, body: String, kind: NodeKind, assignee: String?): Node
     suspend fun nodes(): List<Node>
 
     /** Total tracked seconds on a node, both yours and every agent's. */
@@ -55,6 +62,7 @@ fun mindGraphTools(vault: VaultAccess): List<McpTool> = listOf(
     listReadyTasksTool(vault),
     getNodeTool(vault),
     createTaskTool(vault),
+    createNoteTool(vault),
     linkNodesTool(vault),
     updateStatusTool(vault),
 )
@@ -173,6 +181,61 @@ private fun createTaskTool(vault: VaultAccess) = McpTool(
         append("Created task \"${node.title}\" with id ${node.id.value}.")
         due?.let { append(" Due $it.") }
         assignee?.let { append(" Assigned to $it.") }
+    }
+}
+
+private fun createNoteTool(vault: VaultAccess) = McpTool(
+    name = "create_note",
+    description =
+        "Record something in the user's MindGraph vault that is not work to be done — a " +
+            "finding, a decision, a piece of reference. Use this rather than create_task when " +
+            "nobody has to do anything about it: a note carries no status, so it never appears " +
+            "in list_ready_tasks as work that will never be picked up. Link it with link_nodes " +
+            "to whatever it is about; an unlinked note is a dot. Returns the new note's id.",
+    schema = buildJsonObject {
+        put("type", "object")
+        putJsonObject("properties") {
+            putJsonObject("title") {
+                put("type", "string")
+                put("description", "Short title, e.g. 'Gradle overwrites classes under the running app'.")
+            }
+            putJsonObject("body") {
+                put("type", "string")
+                put("description", "Markdown body. This is the note; say why it matters, not just what.")
+            }
+            putJsonObject("kind") {
+                put("type", "string")
+                putJsonArray("enum") { NodeKind.entries.forEach { add(it.slug) } }
+                put("description",
+                    "What the document is: 'note' for an observation, 'rfc' for a design with " +
+                        "a decision and its rationale, 'reference' for material you will look " +
+                        "up again. Defaults to note.")
+            }
+            putJsonObject("assignee") {
+                put("type", "string")
+                put("description", ASSIGNEE_HINT)
+            }
+        }
+        putJsonArray("required") { add("title") }
+        put("additionalProperties", false)
+    },
+) { arguments ->
+    val title = arguments.requiredString("title")
+    val body = arguments["body"]?.jsonPrimitive?.contentOrNull.orEmpty()
+    val assignee = arguments.optionalName("assignee")
+    val kind = arguments["kind"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+        ?.let { raw ->
+            NodeKind.parse(raw) ?: throw IllegalArgumentException(
+                "kind must be one of ${NodeKind.entries.joinToString(", ") { it.slug }}, not \"$raw\".",
+            )
+        }
+        ?: NodeKind.Note
+
+    val node = runBlocking { vault.createNote(title, body, kind, assignee) }
+    buildString {
+        append("Created ${kind.slug} \"${node.title}\" with id ${node.id.value}.")
+        assignee?.let { append(" Assigned to $it.") }
+        append(" It is not a task, so it will not appear in ready work.")
     }
 }
 

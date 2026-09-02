@@ -3,6 +3,7 @@ package dev.mindgraph.mcp
 import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
+import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskFacet
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.LinkOutcome
@@ -33,6 +34,13 @@ class StoreVault(
         due: String?,
         assignee: String?,
     ): Node = store.create(title, body, TaskFacet(TaskStatus.Todo, due = due), assignee = assignee)
+
+    override suspend fun createNote(
+        title: String,
+        body: String,
+        kind: NodeKind,
+        assignee: String?,
+    ): Node = store.create(title, body, task = null, kind = kind, assignee = assignee)
 
     override suspend fun nodes(): List<Node> = store.load()
 

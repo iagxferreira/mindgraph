@@ -26,6 +26,7 @@ import dev.mindgraph.mcp.mindGraphTools
 import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
+import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.model.Worker
 import dev.mindgraph.state.AppViewModel
@@ -80,6 +81,19 @@ fun App() {
                             asTask = true,
                             due = due,
                             assignee = assignee,
+                        )
+
+                        override suspend fun createNote(
+                            title: String,
+                            body: String,
+                            kind: NodeKind,
+                            assignee: String?,
+                        ): Node = model.createNodeNow(
+                            title,
+                            body,
+                            asTask = false,
+                            assignee = assignee,
+                            kind = kind,
                         )
 
                         override suspend fun nodes(): List<Node> = model.nodes
