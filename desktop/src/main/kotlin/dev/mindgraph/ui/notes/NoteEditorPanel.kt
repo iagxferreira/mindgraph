@@ -32,6 +32,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.InputChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -54,8 +56,10 @@ import java.awt.Cursor
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.TaskStatus
+import dev.mindgraph.model.NodeKind
 import dev.mindgraph.state.AppViewModel
 import dev.mindgraph.ui.theme.Accent
+import dev.mindgraph.ui.shell.KindGlyph
 import dev.mindgraph.ui.theme.Blocked
 import dev.mindgraph.ui.theme.Border
 import dev.mindgraph.ui.theme.Done
@@ -116,6 +120,8 @@ fun NoteEditorPanel(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
+            KindChip(kind = node.kind, onChange = { viewModel.setKind(node.id, it) })
+
             if (node.isTask) {
                 TaskStatus.entries.forEach { status ->
                     StatusChip(
@@ -213,6 +219,52 @@ fun NoteEditorPanel(
             onStartLink = onStartLink,
             onCancelLink = onCancelLink,
         )
+    }
+}
+
+/**
+ * What this document is — note, RFC, or reference. A menu rather than a row of chips: the
+ * header already carries status and a deadline, and kind changes about once in a node's life.
+ */
+@Composable
+private fun KindChip(kind: NodeKind, onChange: (NodeKind) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+
+    Box {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(7.dp))
+                .background(SurfaceHigh)
+                .clickable { open = true }
+                .padding(horizontal = 9.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            KindGlyph(kind, TextMuted, size = 8.dp)
+            Text(
+                kind.name.lowercase(),
+                style = MaterialTheme.typography.labelMedium,
+                color = TextMuted,
+            )
+        }
+
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            NodeKind.entries.forEach { option ->
+                DropdownMenuItem(
+                    onClick = { onChange(option); open = false },
+                    leadingIcon = {
+                        KindGlyph(option, if (option == kind) Accent else TextMuted, size = 8.dp)
+                    },
+                    text = {
+                        Text(
+                            option.name.lowercase(),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (option == kind) Accent else TextPrimary,
+                        )
+                    },
+                )
+            }
+        }
     }
 }
 
