@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -83,6 +85,7 @@ private const val PreviewModeRatio = 0f
  * The writing surface. A node is edited the same way whether or not it's a task — the task
  * controls sit in the header rather than opening a different kind of screen.
  */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NoteEditorPanel(
     node: Node,
@@ -115,12 +118,17 @@ fun NoteEditorPanel(
             TimeTrackingRow(node = node, viewModel = viewModel)
         }
 
-        Row(
+        FlowRow(
             modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             KindChip(kind = node.kind, onChange = { viewModel.setKind(node.id, it) })
+
+            AssigneeChip(
+                assignee = node.assignee,
+                onSet = { viewModel.setAssignee(node.id, it) },
+            )
 
             if (node.isTask) {
                 TaskStatus.entries.forEach { status ->
@@ -145,7 +153,6 @@ fun NoteEditorPanel(
                 }
             }
 
-            Spacer(Modifier.weight(1f))
             TextButton(onClick = { viewModel.setArchived(node.id, !node.archived) }) {
                 Text(
                     if (node.archived) "Restore" else "Archive",
@@ -237,6 +244,82 @@ fun NoteEditorPanel(
             onStartLink = onStartLink,
             onCancelLink = onCancelLink,
         )
+    }
+}
+
+/**
+ * Who is meant to pick this up. Free text, because the names that matter are whatever you
+ * and your agents already call yourselves — the session log takes an agent's own word for
+ * its name, and this should agree with it.
+ */
+@Composable
+private fun AssigneeChip(assignee: String?, onSet: (String?) -> Unit) {
+    var editing by remember(assignee) { mutableStateOf(false) }
+    var draft by remember(assignee) { mutableStateOf(assignee.orEmpty()) }
+
+    fun commit() {
+        onSet(draft.trim().takeIf { it.isNotEmpty() })
+        editing = false
+    }
+
+    if (editing) {
+        BasicTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.labelMedium.copy(color = TextPrimary),
+            cursorBrush = SolidColor(Accent),
+            modifier = Modifier
+                .width(128.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(SurfaceHigh)
+                .border(1.dp, Border, RoundedCornerShape(7.dp))
+                .padding(horizontal = 9.dp, vertical = 6.dp)
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.Enter, Key.NumPadEnter -> { commit(); true }
+                        Key.Escape -> { draft = assignee.orEmpty(); editing = false; true }
+                        else -> false
+                    }
+                },
+            decorationBox = { field ->
+                if (draft.isEmpty()) {
+                    Text(
+                        "who?",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextMuted,
+                    )
+                }
+                field()
+            },
+        )
+    } else {
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(7.dp))
+                .background(SurfaceHigh)
+                .clickable { editing = true }
+                .padding(horizontal = 9.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                if (assignee == null) "+ assign" else "@$assignee",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (assignee == null) TextMuted else Accent,
+                maxLines = 1,
+                softWrap = false,
+            )
+            if (assignee != null) {
+                Text(
+                    "×",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextMuted,
+                    modifier = Modifier.clickable { onSet(null) },
+                )
+            }
+        }
     }
 }
 

@@ -176,6 +176,7 @@ private fun TaskRow(
                 buildString {
                     append(formatDuration(trackedSeconds))
                     if (isTracking) append(" · tracking")
+                    node.assignee?.let { append(" · @$it") }
                     // The list is ordered by this, so it has to be legible in the list.
                     if (due != null && !isDone) {
                         append(if (isOverdue) " · overdue $due" else " · due $due")

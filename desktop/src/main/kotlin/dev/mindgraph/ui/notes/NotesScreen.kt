@@ -194,6 +194,7 @@ private fun NodeRow(
             Text(
                 buildString {
                     append(formatDuration(trackedSeconds))
+                    node.assignee?.let { append(" · @$it") }
                     if (isBlocked) append(" · blocked")
                 },
                 style = MaterialTheme.typography.labelSmall,
