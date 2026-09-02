@@ -10,6 +10,7 @@ import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.TaskFacet
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.model.WorkSession
+import dev.mindgraph.model.Worker
 import dev.mindgraph.model.currentUnixTimestamp
 import dev.mindgraph.storage.NodeStore
 import dev.mindgraph.storage.SessionLog
@@ -50,6 +51,10 @@ class AppViewModel(
     var runningNodeId by mutableStateOf<NodeId?>(null)
         private set
     var runningSinceUnix by mutableStateOf<Long?>(null)
+        private set
+    var runningWorker by mutableStateOf(Worker.Human)
+        private set
+    var runningAgent by mutableStateOf<String?>(null)
         private set
     var liveNowUnix by mutableStateOf(currentUnixTimestamp())
         private set
@@ -158,7 +163,13 @@ class AppViewModel(
      * Sets a status and hands back the node as saved. A note given a status becomes a task —
      * the facet is the only thing that distinguishes them, so there is nothing else to do.
      */
-    suspend fun setStatusNow(nodeId: NodeId, status: TaskStatus, due: String? = null): Node? {
+    suspend fun setStatusNow(
+        nodeId: NodeId,
+        status: TaskStatus,
+        due: String? = null,
+        worker: Worker = Worker.Human,
+        agent: String? = null,
+    ): Node? {
         val node = nodeById(nodeId) ?: return null
         val facet = node.task ?: TaskFacet(status = status)
         val saved = store.save(
@@ -173,6 +184,16 @@ class AppViewModel(
             ),
         )
         refresh()
+
+        // The status *is* the timer. Moving a task to doing starts the clock and closing it
+        // stops it, so elapsed time is a consequence of the work being tracked rather than a
+        // second thing to remember — which is the only way an agent's time gets recorded at all.
+        if (status == TaskStatus.Doing) {
+            beginTracking(nodeId, worker, agent)
+        } else if (runningNodeId == nodeId) {
+            stopWorkNow(nodeId)
+        }
+
         statusMessage = "Marked ${status.name.lowercase()}"
         return saved
     }
@@ -251,20 +272,46 @@ class AppViewModel(
         return logged + live
     }
 
+    /** Tracked seconds on a node by one worker, including the stretch running right now. */
+    fun trackedSecondsFor(nodeId: NodeId, worker: Worker): Long {
+        val logged = sessions.filter { it.nodeId == nodeId && it.worker == worker }.sumOf { it.seconds }
+        val since = runningSinceUnix
+        val live = if (runningNodeId == nodeId && runningWorker == worker && since != null) {
+            (liveNowUnix - since).coerceAtLeast(0)
+        } else {
+            0
+        }
+        return logged + live
+    }
+
     fun isTracking(nodeId: NodeId): Boolean = runningNodeId == nodeId
 
     fun startWork(nodeId: NodeId) {
         scope.launch {
-            runningNodeId?.takeIf { it != nodeId }?.let { stopWorkNow(it) }
-            runningNodeId = nodeId
-            runningSinceUnix = currentUnixTimestamp()
-            liveNowUnix = currentUnixTimestamp()
-            startTicker()
-            nodeById(nodeId)?.takeIf { it.task?.status == TaskStatus.Todo }?.let {
-                setStatus(nodeId, TaskStatus.Doing)
+            val wasTodo = nodeById(nodeId)?.task?.status == TaskStatus.Todo
+            if (wasTodo) {
+                // setStatusNow starts the clock itself, so this is one call, not two.
+                setStatusNow(nodeId, TaskStatus.Doing)
+            } else {
+                beginTracking(nodeId, Worker.Human, agent = null)
             }
             statusMessage = "Tracking"
         }
+    }
+
+    /**
+     * Puts a node on the clock. Idempotent for the node already running, so a status change
+     * that repeats itself doesn't restart the stretch and lose the time before it.
+     */
+    private suspend fun beginTracking(nodeId: NodeId, worker: Worker, agent: String? = null) {
+        if (runningNodeId == nodeId) return
+        runningNodeId?.let { stopWorkNow(it) }
+        runningNodeId = nodeId
+        runningWorker = worker
+        runningAgent = agent
+        runningSinceUnix = currentUnixTimestamp()
+        liveNowUnix = currentUnixTimestamp()
+        startTicker()
     }
 
     fun stopWork(nodeId: NodeId) {
@@ -274,18 +321,23 @@ class AppViewModel(
         }
     }
 
-    private suspend fun stopWorkNow(nodeId: NodeId) {
+    /** Closes the running stretch and returns how long it was, or 0 if nothing was running. */
+    private suspend fun stopWorkNow(nodeId: NodeId): Long {
         val since = runningSinceUnix
-        if (runningNodeId != nodeId || since == null) return
+        if (runningNodeId != nodeId || since == null) return 0
         val now = currentUnixTimestamp()
         val elapsed = (now - since).coerceAtLeast(0)
+        val worker = runningWorker
+        val agent = runningAgent
         runningNodeId = null
+        runningAgent = null
         runningSinceUnix = null
         stopTicker()
         if (elapsed > 0) {
-            sessionLog.append(WorkSession(nodeId, since, now, elapsed))
+            sessionLog.append(WorkSession(nodeId, since, now, elapsed, worker, agent))
             sessions = sessionLog.load()
         }
+        return elapsed
     }
 
     private fun startTicker() {
