@@ -37,6 +37,7 @@ class NodeStore(private val vault: Vault) {
         body: String = "",
         task: TaskFacet? = null,
         kind: NodeKind = NodeKind.Note,
+        assignee: String? = null,
     ): Node =
         withContext(Dispatchers.IO) {
             vault.prepare()
@@ -47,6 +48,7 @@ class NodeStore(private val vault: Vault) {
                 body = body,
                 kind = kind,
                 task = task,
+                assignee = assignee,
                 createdAt = now,
                 updatedAt = now,
                 slug = allocateSlug(slugify(title), null),
@@ -105,6 +107,7 @@ class NodeStore(private val vault: Vault) {
             // hand-edited vault should cost you a label, not the document.
             kind = NodeKind.parse(frontmatter.string(KEY_KIND)) ?: NodeKind.Note,
             archived = frontmatter.string(KEY_ARCHIVED)?.trim().equals("true", ignoreCase = true),
+            assignee = frontmatter.string(KEY_ASSIGNEE)?.trim()?.takeIf { it.isNotEmpty() },
             task = status?.let {
                 TaskFacet(
                     status = it,
@@ -134,6 +137,7 @@ class NodeStore(private val vault: Vault) {
             // Written only when true: `archived: false` on every file is noise on a flag that
             // is false almost always.
             if (node.archived) add("$KEY_ARCHIVED: true")
+            node.assignee?.let { add("$KEY_ASSIGNEE: ${Frontmatter.quote(it)}") }
             node.task?.let { facet ->
                 add("$KEY_STATUS: ${facet.status.name.lowercase()}")
                 facet.due?.let { add("$KEY_DUE: ${Frontmatter.quote(it)}") }
@@ -218,6 +222,7 @@ class NodeStore(private val vault: Vault) {
         const val KEY_TITLE = "title"
         const val KEY_KIND = "kind"
         const val KEY_ARCHIVED = "archived"
+        const val KEY_ASSIGNEE = "assignee"
         const val KEY_STATUS = "status"
         const val KEY_DUE = "due"
         const val KEY_COMPLETED = "completed"
@@ -227,7 +232,7 @@ class NodeStore(private val vault: Vault) {
         const val KEY_UPDATED = "updated"
 
         val KNOWN_KEYS = setOf(
-            KEY_ID, KEY_TITLE, KEY_KIND, KEY_ARCHIVED, KEY_STATUS, KEY_DUE, KEY_COMPLETED,
+            KEY_ID, KEY_TITLE, KEY_KIND, KEY_ARCHIVED, KEY_ASSIGNEE, KEY_STATUS, KEY_DUE, KEY_COMPLETED,
             KEY_DEPENDS_ON, KEY_RELATES_TO, KEY_CREATED, KEY_UPDATED,
         )
     }
