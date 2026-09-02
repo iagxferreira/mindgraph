@@ -130,9 +130,14 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 "All nodes",
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary,
+                // This column is narrow and the controls beside it are fixed width, so without
+                // a line limit the title wraps a word at a time rather than the row giving way.
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
             )
-            Text("${filteredNodes.size} total", style = MaterialTheme.typography.labelSmall, color = TextMuted)
+            // The count that stood here said exactly what the All pill below it says — counts
+            // is grouped from the same filtered list — and it was spending width to do it.
             TextButton(onClick = { viewModel.createNode() }) { Text("New", color = Accent) }
             ImportMemoryButton(onImport = { viewModel.importClaudeMemory() })
             DoneFilterToggle(hideDone = hideDone, onToggle = { hideDone = !hideDone })
