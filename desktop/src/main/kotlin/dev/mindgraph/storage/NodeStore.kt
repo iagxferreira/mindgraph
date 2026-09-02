@@ -38,6 +38,12 @@ class NodeStore(private val vault: Vault) {
         task: TaskFacet? = null,
         kind: NodeKind = NodeKind.Note,
         assignee: String? = null,
+        /**
+         * Frontmatter keys MindGraph does not model, written on the way in. Once on disk they
+         * are carried by [existingExtras] like any hand-added key, so an importer can record
+         * where a node came from without the domain growing a field for every source.
+         */
+        extras: Map<String, String> = emptyMap(),
     ): Node =
         withContext(Dispatchers.IO) {
             vault.prepare()
@@ -53,9 +59,28 @@ class NodeStore(private val vault: Vault) {
                 updatedAt = now,
                 slug = allocateSlug(slugify(title), null),
             )
-            writeNode(node)
+            writeNode(node, extras.mapValues { (_, text) -> Frontmatter.Value.Scalar(text) })
             node
         }
+
+    /**
+     * Every value a frontmatter key takes across the vault.
+     *
+     * Reads the files rather than [load], because the keys worth asking about this way are the
+     * ones [Node] deliberately does not model — an importer asking "which of these have I
+     * already brought in?" is the case this exists for.
+     */
+    suspend fun frontmatterValues(key: String): Set<String> = withContext(Dispatchers.IO) {
+        vault.prepare()
+        Files.list(vault.nodesDir).use { stream ->
+            stream.filter { it.toString().endsWith(".md") && Files.isRegularFile(it) }.toList()
+        }
+            .mapNotNull { path ->
+                runCatching { Files.readString(path) }.getOrNull()
+                    ?.let { Frontmatter.split(it).first.string(key) }
+            }
+            .toSet()
+    }
 
     suspend fun save(node: Node): Node = withContext(Dispatchers.IO) {
         val existingPath = findPathById(node.id)
@@ -125,9 +150,11 @@ class NodeStore(private val vault: Vault) {
 
     // ---- writing ----
 
-    private fun writeNode(node: Node) {
+    private fun writeNode(node: Node, added: Map<String, Frontmatter.Value> = emptyMap()) {
         val path = vault.nodesDir.resolve("${node.slug}.md")
-        val preserved = existingExtras(path)
+        // What is already on disk wins nothing and loses nothing: added keys are only supplied
+        // on create, where there is no file to preserve.
+        val preserved = existingExtras(path) + added
 
         val lines = buildList {
             add("---")
