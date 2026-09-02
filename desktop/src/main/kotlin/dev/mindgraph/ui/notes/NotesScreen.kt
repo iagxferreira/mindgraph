@@ -119,6 +119,7 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             counts = counts,
             onSelect = { kindFilter = it },
             modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
+            compact = true,
         )
         HorizontalDivider()
 

@@ -70,6 +70,8 @@ fun KindFilterBar(
     counts: Map<NodeKind, Int>,
     onSelect: (NodeKind?) -> Unit,
     modifier: Modifier = Modifier,
+    /** Drops the labels, leaving shape and count. For columns too narrow to spell "References". */
+    compact: Boolean = false,
 ) {
     Row(
         modifier = modifier
@@ -84,6 +86,7 @@ fun KindFilterBar(
             kind = null,
             count = counts.values.sum(),
             isActive = selected == null,
+            compact = compact,
             onClick = { onSelect(null) },
         )
         NodeKind.entries.forEach { kind ->
@@ -91,6 +94,7 @@ fun KindFilterBar(
                 kind = kind,
                 count = counts[kind] ?: 0,
                 isActive = selected == kind,
+                compact = compact,
                 onClick = { onSelect(if (selected == kind) null else kind) },
             )
         }
@@ -98,7 +102,13 @@ fun KindFilterBar(
 }
 
 @Composable
-private fun FilterPill(kind: NodeKind?, count: Int, isActive: Boolean, onClick: () -> Unit) {
+private fun FilterPill(
+    kind: NodeKind?,
+    count: Int,
+    isActive: Boolean,
+    compact: Boolean,
+    onClick: () -> Unit,
+) {
     // A kind with nothing in it stays visible so the row doesn't reshuffle as a vault fills up.
     val isEmpty = count == 0 && kind != null
     val tint = when {
@@ -113,15 +123,26 @@ private fun FilterPill(kind: NodeKind?, count: Int, isActive: Boolean, onClick: 
             .background(if (isActive) Accent.copy(alpha = 0.16f) else Color.Transparent)
             .clickable(enabled = !isEmpty, onClick = onClick)
             .padding(horizontal = 9.dp, vertical = 5.dp),
-        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         kind?.let { KindGlyph(it, tint, size = 8.dp) }
+        // The label is what overflows a narrow column; the shape and the count still identify it.
+        if (!compact || kind == null) {
+            Text(
+                text = kind?.label ?: "All",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (isActive) TextPrimary else tint,
+                maxLines = 1,
+                softWrap = false,
+            )
+        }
         Text(
-            text = kind?.label ?: "All",
+            count.toString(),
             style = MaterialTheme.typography.labelSmall,
-            color = if (isActive) TextPrimary else tint,
+            color = tint,
+            maxLines = 1,
+            softWrap = false,
         )
-        Text(count.toString(), style = MaterialTheme.typography.labelSmall, color = tint)
     }
 }
