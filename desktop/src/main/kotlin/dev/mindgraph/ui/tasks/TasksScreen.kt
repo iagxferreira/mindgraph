@@ -49,11 +49,12 @@ fun TasksScreen(
     modifier: Modifier = Modifier,
 ) {
     val graph = viewModel.graph
-    val tasks = viewModel.nodes.filter { it.isTask }
+    // Archived work is put away, not finished — it belongs in neither column.
+    val tasks = viewModel.nodes.filter { it.isTask && !it.archived }
 
     val doing = tasks.filter { it.task?.status == TaskStatus.Doing }
     val ready = graph.rankedReadyTasks()
-    val blocked = tasks.filter { it.task?.status?.isOpen == true && graph.isBlocked(it.id) }
+    val blocked = tasks.filter { it.isLiveWork && graph.isBlocked(it.id) }
     val finished = tasks.filter { it.task?.status == TaskStatus.Done }
 
     Column(modifier = modifier.fillMaxSize().background(Ink).padding(24.dp)) {

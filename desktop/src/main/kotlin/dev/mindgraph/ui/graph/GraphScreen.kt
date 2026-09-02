@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CenterFocusStrong
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
@@ -65,12 +66,13 @@ fun GraphScreen(
     var viewResetKey by remember { mutableStateOf(0) }
     var mode by remember { mutableStateOf(LayoutMode.Mind) }
     var kindFilter by remember { mutableStateOf<NodeKind?>(null) }
+    var showArchived by remember { mutableStateOf(false) }
 
     val graph = viewModel.graph
 
     // Filtering hides nodes; it never moves them. Positions stay the layout's business, so a
     // node is where you left it when the filter comes back off.
-    val visible = GraphFilter.apply(viewModel.nodes, viewModel.edges, kindFilter)
+    val visible = GraphFilter.apply(viewModel.nodes, viewModel.edges, kindFilter, showArchived)
     val kindCounts = viewModel.nodes.groupingBy { it.kind }.eachCount()
 
     LaunchedEffect(mode, viewModel.nodes, viewModel.edges) {
@@ -123,6 +125,11 @@ fun GraphScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FloatingAction(Icons.Outlined.Add, "New note") { viewModel.createNode() }
+            FloatingAction(
+                icon = Icons.Outlined.Inventory2,
+                description = if (showArchived) "Hide archived nodes" else "Show archived nodes",
+                isActive = showArchived,
+            ) { showArchived = !showArchived }
             FloatingAction(Icons.Outlined.Refresh, "Release pinned nodes") { viewModel.layout.unpinAll() }
             FloatingAction(Icons.Outlined.CenterFocusStrong, "Recenter view") { viewResetKey++ }
         }
@@ -262,17 +269,29 @@ private fun CountsPill(nodeCount: Int, edgeCount: Int, readyCount: Int) {
 }
 
 @Composable
-private fun FloatingAction(icon: ImageVector, description: String, onClick: () -> Unit) {
+private fun FloatingAction(
+    icon: ImageVector,
+    description: String,
+    isActive: Boolean = false,
+    onClick: () -> Unit,
+) {
     Box(
         modifier = Modifier
             .size(38.dp)
             .clip(RoundedCornerShape(10.dp))
-            .background(SurfaceHigh)
-            .border(1.dp, Border, RoundedCornerShape(10.dp))
+            // A toggle has to look held down, or you cannot tell an emptier graph from a
+            // filtered one.
+            .background(if (isActive) Accent.copy(alpha = 0.18f) else SurfaceHigh)
+            .border(1.dp, if (isActive) Accent else Border, RoundedCornerShape(10.dp))
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription = description, tint = TextMuted, modifier = Modifier.size(18.dp))
+        Icon(
+            icon,
+            contentDescription = description,
+            tint = if (isActive) Accent else TextMuted,
+            modifier = Modifier.size(18.dp),
+        )
     }
 }
 
