@@ -162,6 +162,7 @@ class NodeStore(private val vault: Vault) {
             },
             dependsOn = frontmatter.list(KEY_DEPENDS_ON).filter(Ulid::looksValid).map(::NodeId),
             relatesTo = frontmatter.list(KEY_RELATES_TO).filter(Ulid::looksValid).map(::NodeId),
+            contextFor = frontmatter.list(KEY_CONTEXT_FOR).filter(Ulid::looksValid).map(::NodeId),
             createdAt = frontmatter.string(KEY_CREATED) ?: timestamp(),
             updatedAt = frontmatter.string(KEY_UPDATED) ?: timestamp(),
             slug = slug,
@@ -199,6 +200,9 @@ class NodeStore(private val vault: Vault) {
             }
             if (node.relatesTo.isNotEmpty()) {
                 add("$KEY_RELATES_TO: [${node.relatesTo.joinToString(", ") { it.value }}]")
+            }
+            if (node.contextFor.isNotEmpty()) {
+                add("$KEY_CONTEXT_FOR: [${node.contextFor.joinToString(", ") { it.value }}]")
             }
             add("$KEY_CREATED: ${node.createdAt}")
             add("$KEY_UPDATED: ${node.updatedAt}")
@@ -294,13 +298,14 @@ class NodeStore(private val vault: Vault) {
         const val KEY_COMPLETED = "completed"
         const val KEY_DEPENDS_ON = "depends_on"
         const val KEY_RELATES_TO = "relates_to"
+        const val KEY_CONTEXT_FOR = "context_for"
         const val KEY_CREATED = "created"
         const val KEY_UPDATED = "updated"
 
         val KNOWN_KEYS = setOf(
             KEY_ID, KEY_TITLE, KEY_KIND, KEY_ARCHIVED, KEY_ASSIGNEE, KEY_ALIASES, KEY_ORIGIN_PROJECT,
             KEY_STATUS, KEY_DUE, KEY_COMPLETED,
-            KEY_DEPENDS_ON, KEY_RELATES_TO, KEY_CREATED, KEY_UPDATED,
+            KEY_DEPENDS_ON, KEY_RELATES_TO, KEY_CONTEXT_FOR, KEY_CREATED, KEY_UPDATED,
         )
     }
 }
@@ -318,10 +323,14 @@ fun List<Node>.toEdges(): List<Edge> {
     return flatMap { node ->
         val explicitDependencies = node.dependsOn.filter { it in known }
         val explicitRelations = node.relatesTo.filter { it in known }
+        // Context is a deliberate choice, so it is never inferred from a wikilink in the body -
+        // an incidental mention must not quietly enlarge what an agent is asked to load.
+        val explicitContext = node.contextFor.filter { it in known }
         val inlineRelations = WikiLinks.resolve(node.body, nodes)
             .filter { it != node.id && it !in explicitRelations && it !in explicitDependencies }
 
         explicitDependencies.map { Edge(node.id, it, EdgeKind.DependsOn) } +
+            explicitContext.map { Edge(node.id, it, EdgeKind.ContextFor) } +
             (explicitRelations + inlineRelations).map { Edge(node.id, it, EdgeKind.RelatesTo) }
     }
 }
