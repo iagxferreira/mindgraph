@@ -27,8 +27,12 @@ class StoreVault(
     private var startedAtUnix: Long? = null
     private var runningAgent: String? = null
 
-    override suspend fun createTask(title: String, body: String, due: String?): Node =
-        store.create(title, body, TaskFacet(TaskStatus.Todo, due = due))
+    override suspend fun createTask(
+        title: String,
+        body: String,
+        due: String?,
+        assignee: String?,
+    ): Node = store.create(title, body, TaskFacet(TaskStatus.Todo, due = due), assignee = assignee)
 
     override suspend fun nodes(): List<Node> = store.load()
 
@@ -37,10 +41,16 @@ class StoreVault(
         status: TaskStatus,
         due: String?,
         agent: String?,
+        assignee: String?,
     ): Node? {
         val node = store.load().find { it.id == nodeId } ?: return null
         val facet = node.task ?: TaskFacet(status = status)
-        val saved = store.save(node.copy(task = facet.copy(status = status, due = due ?: facet.due)))
+        val saved = store.save(
+            node.copy(
+                assignee = assignee ?: node.assignee,
+                task = facet.copy(status = status, due = due ?: facet.due),
+            ),
+        )
 
         // The clock the view model runs, reduced to what a test needs: doing opens a stretch,
         // anything else closes it and logs who spent the time.

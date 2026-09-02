@@ -73,7 +73,14 @@ fun App() {
                             title: String,
                             body: String,
                             due: String?,
-                        ): Node = model.createNodeNow(title, body, asTask = true, due = due)
+                            assignee: String?,
+                        ): Node = model.createNodeNow(
+                            title,
+                            body,
+                            asTask = true,
+                            due = due,
+                            assignee = assignee,
+                        )
 
                         override suspend fun nodes(): List<Node> = model.nodes
 
@@ -88,6 +95,7 @@ fun App() {
                             status: TaskStatus,
                             due: String?,
                             agent: String?,
+                            assignee: String?,
                         ): Node? = model.setStatusNow(
                             nodeId,
                             status,
@@ -96,6 +104,7 @@ fun App() {
                             // same change made in the window is yours.
                             worker = Worker.Agent,
                             agent = agent,
+                            assignee = assignee,
                         )
 
                         override suspend fun trackedSeconds(nodeId: NodeId): Long =
