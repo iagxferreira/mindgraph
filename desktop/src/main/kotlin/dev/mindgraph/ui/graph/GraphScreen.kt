@@ -51,6 +51,7 @@ import dev.mindgraph.state.AppViewModel
 import dev.mindgraph.state.GraphFilter
 import dev.mindgraph.state.Clustering
 import dev.mindgraph.state.LayoutMode
+import dev.mindgraph.state.TaskGraph
 import dev.mindgraph.ui.shell.KindFilterBar
 import dev.mindgraph.ui.theme.Accent
 import dev.mindgraph.ui.theme.Blocked
@@ -83,8 +84,9 @@ fun GraphScreen(
 
     val graph = viewModel.graph
 
-    // Filtering hides nodes; it never moves them. Positions stay the layout's business, so a
-    // node is where you left it when the filter comes back off.
+    // Filtering decides how many nodes there are, and the layout is built from that count, so
+    // the engine is driven with the visible set rather than the vault. Hiding a node therefore
+    // rebuilds the picture around what is left instead of leaving a hole where it used to sit.
     val visible = GraphFilter.apply(
         viewModel.nodes,
         viewModel.edges,
@@ -98,13 +100,19 @@ fun GraphScreen(
     // agree about what a group is, and they only do if they come from the same map.
     val clusterGroups = remember(visible.nodes) { Clustering.groups(visible.nodes) }
 
-    LaunchedEffect(mode, viewModel.nodes, viewModel.edges) {
+    // Ranks for Flow come from the visible subgraph. Ranking over the whole vault would space
+    // the rows for a chain running through nodes that are not drawn, which reads as a gap.
+    // `graph` stays the full vault everywhere else on this screen: a node hidden by a filter
+    // still blocks what depends on it, and saying otherwise would be a lie about the work.
+    val visibleGraph = remember(visible.nodes) { TaskGraph(visible.nodes) }
+
+    LaunchedEffect(mode, visible.nodes, visible.edges) {
         viewModel.layout.mode = mode
         if (mode == LayoutMode.Cluster) {
             viewModel.layout.setClusters(clusterGroups)
         }
         if (mode == LayoutMode.Flow) {
-            val ranks = graph.ranks()
+            val ranks = visibleGraph.ranks()
             val terminalRank = (ranks.values.maxOrNull() ?: 0) + 1
             viewModel.layout.setFlowRanks(
                 ranks.mapKeys { it.key.value }.mapValues { (id, rank) ->
@@ -116,6 +124,13 @@ fun GraphScreen(
                 },
             )
         }
+    }
+
+    // Keyed on the filters themselves rather than on the resulting node list: a filter toggle
+    // is a request to rebuild the picture, whereas an agent writing a node over MCP is not, and
+    // scrambling the canvas under someone every time the vault changes would be its own bug.
+    LaunchedEffect(kindFilter, showArchived, hideDone) {
+        viewModel.layout.reflow()
     }
 
     Box(modifier = modifier.fillMaxSize().background(Ink)) {
