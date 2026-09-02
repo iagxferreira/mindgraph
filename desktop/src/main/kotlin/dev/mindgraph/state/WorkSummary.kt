@@ -4,14 +4,23 @@ import dev.mindgraph.model.Node
 import dev.mindgraph.model.WorkSession
 import dev.mindgraph.model.Worker
 
-/** Tracked seconds split by who spent them. */
-data class WorkerSplit(val human: Long = 0, val agent: Long = 0) {
+/** Tracked seconds split by who spent them, retaining the agent breakdown for the Work UI. */
+data class WorkerSplit(
+    val human: Long = 0,
+    val agent: Long = 0,
+    val agents: Map<String?, Long> = emptyMap(),
+) {
     val total: Long get() = human + agent
 
     /** How much of this was the machine, 0f..1f. Zero when nothing was tracked at all. */
     val agentShare: Float get() = if (total == 0L) 0f else agent.toFloat() / total
 
-    operator fun plus(other: WorkerSplit) = WorkerSplit(human + other.human, agent + other.agent)
+    operator fun plus(other: WorkerSplit): WorkerSplit {
+        val mergedAgents = (agents.keys + other.agents.keys).associateWith { name ->
+            (agents[name] ?: 0L) + (other.agents[name] ?: 0L)
+        }.filterValues { it > 0 }
+        return WorkerSplit(human + other.human, agent + other.agent, mergedAgents)
+    }
 }
 
 data class NodeWork(val node: Node, val split: WorkerSplit)
@@ -32,7 +41,10 @@ object WorkSummary {
         sessions.fold(WorkerSplit()) { acc, session ->
             when (session.worker) {
                 Worker.Human -> acc + WorkerSplit(human = session.seconds)
-                Worker.Agent -> acc + WorkerSplit(agent = session.seconds)
+                Worker.Agent -> acc + WorkerSplit(
+                    agent = session.seconds,
+                    agents = mapOf(session.agent to session.seconds),
+                )
             }
         }
 
