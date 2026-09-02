@@ -34,6 +34,7 @@ import dev.mindgraph.state.LinkOutcome
 import dev.mindgraph.storage.NodeStore
 import dev.mindgraph.storage.SessionLog
 import dev.mindgraph.storage.Vault
+import dev.mindgraph.storage.VaultWatcher
 import dev.mindgraph.ui.graph.GraphScreen
 import dev.mindgraph.ui.notes.NotesScreen
 import dev.mindgraph.ui.shell.Destination
@@ -59,7 +60,7 @@ fun App() {
                 val vault = withContext(Dispatchers.IO) {
                     Vault.default().also { it.prepare() }
                 }
-                viewModel = AppViewModel(NodeStore(vault), SessionLog(vault))
+                viewModel = AppViewModel(NodeStore(vault), SessionLog(vault), VaultWatcher(vault))
             }
 
             val model = viewModel
