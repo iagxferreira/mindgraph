@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -54,6 +56,7 @@ import dev.mindgraph.state.LayoutMode
 import dev.mindgraph.ui.shell.KindFilterBar
 import dev.mindgraph.ui.theme.Accent
 import dev.mindgraph.ui.theme.Blocked
+import dev.mindgraph.ui.theme.Context
 import dev.mindgraph.ui.theme.Border
 import dev.mindgraph.ui.theme.Ink
 import dev.mindgraph.ui.theme.SurfaceHigh
@@ -296,29 +299,72 @@ private fun LinkKindDialog(
         onDismissRequest = onDismiss,
         title = { Text("Link notes") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("How does \"$sourceTitle\" connect to \"$targetTitle\"?")
-                if (wouldCycle) {
-                    Text(
-                        "A dependency here would create a cycle, so only an association is available.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Blocked,
-                    )
-                }
+            // Three kinds is one too many for a row of buttons, and the difference between them
+            // is the whole point - an unexplained third option would just get picked at random.
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    "How does \"$sourceTitle\" connect to \"$targetTitle\"?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = TextPrimary,
+                )
+                Spacer(Modifier.size(6.dp))
+                LinkChoice(
+                    label = "Relates to it",
+                    detail = "An association. Neither one waits for the other.",
+                    onClick = { onPick(EdgeKind.RelatesTo) },
+                )
+                LinkChoice(
+                    label = "Depends on it",
+                    detail = if (wouldCycle) {
+                        "Unavailable: this would close a dependency cycle."
+                    } else {
+                        "Ordering. This cannot start until that one is finished."
+                    },
+                    enabled = !wouldCycle,
+                    onClick = { onPick(EdgeKind.DependsOn) },
+                )
+                LinkChoice(
+                    label = "Is context for it",
+                    detail = "Load this when working on that. Builds the briefing an agent gets.",
+                    accent = Context,
+                    onClick = { onPick(EdgeKind.ContextFor) },
+                )
             }
         },
         confirmButton = {
-            TextButton(onClick = { onPick(EdgeKind.DependsOn) }, enabled = !wouldCycle) {
-                Text("Depends on it", color = if (wouldCycle) TextMuted else Accent)
-            }
-        },
-        dismissButton = {
-            Row {
-                TextButton(onClick = onDismiss) { Text("Cancel", color = TextMuted) }
-                TextButton(onClick = { onPick(EdgeKind.RelatesTo) }) { Text("Relates to it", color = Accent) }
-            }
+            TextButton(onClick = onDismiss) { Text("Cancel", color = TextMuted) }
         },
     )
+}
+
+/** One row of the link dialog: what the edge means, not just what it is called. */
+@Composable
+private fun LinkChoice(
+    label: String,
+    detail: String,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    accent: Color = Accent,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelLarge,
+            color = if (enabled) accent else TextMuted,
+        )
+        Text(
+            detail,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (enabled) TextMuted else Blocked,
+        )
+    }
 }
 
 @Composable

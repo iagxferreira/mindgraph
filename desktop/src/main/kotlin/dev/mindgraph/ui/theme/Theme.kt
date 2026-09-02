@@ -29,6 +29,13 @@ val Done = Color(0xFF77BE97)
 /** A quieter variant of [Accent] for de-emphasized strokes/fills, kept as one hue not two. */
 val AccentSoft: Color get() = Accent.copy(alpha = 0.35f)
 
+/**
+ * Context edges. A hue of its own rather than a shade of the accent: context is a third kind of
+ * relationship, not a weaker dependency, and the whole point of the bundle is that you can see
+ * at a glance what a project would load.
+ */
+val Context = Color(0xFFD08BC7)
+
 private val MindGraphColorScheme = darkColorScheme(
     background = Ink,
     surface = Surface,

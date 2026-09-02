@@ -42,6 +42,7 @@ import dev.mindgraph.ui.theme.AccentSoft
 import dev.mindgraph.ui.theme.Blocked
 import dev.mindgraph.ui.theme.Done
 import dev.mindgraph.ui.theme.Ink
+import dev.mindgraph.ui.theme.Context
 import dev.mindgraph.ui.theme.TextMuted
 import dev.mindgraph.ui.theme.TextPrimary
 import kotlinx.coroutines.delay
@@ -150,13 +151,26 @@ fun GraphCanvas(
         for (edge in edges) {
             val from = layout.positions[edge.sourceId.value] ?: continue
             val to = layout.positions[edge.targetId.value] ?: continue
-            val isDependency = edge.kind == EdgeKind.DependsOn
+            // Three relationships, three readings: an unbroken line orders work, a dash is a
+            // loose association, and a dotted line in its own hue is what a project would load.
             drawLine(
-                color = if (isDependency) Accent.copy(alpha = 0.55f) else AccentSoft,
+                color = when (edge.kind) {
+                    EdgeKind.DependsOn -> Accent.copy(alpha = 0.55f)
+                    EdgeKind.ContextFor -> Context.copy(alpha = 0.6f)
+                    EdgeKind.RelatesTo -> AccentSoft
+                },
                 start = toScreen(from),
                 end = toScreen(to),
-                strokeWidth = if (isDependency) 2.2f else 1.6f,
-                pathEffect = if (isDependency) null else PathEffect.dashPathEffect(floatArrayOf(5f, 5f)),
+                strokeWidth = when (edge.kind) {
+                    EdgeKind.DependsOn -> 2.2f
+                    EdgeKind.ContextFor -> 1.8f
+                    EdgeKind.RelatesTo -> 1.6f
+                },
+                pathEffect = when (edge.kind) {
+                    EdgeKind.DependsOn -> null
+                    EdgeKind.ContextFor -> PathEffect.dashPathEffect(floatArrayOf(1.5f, 4f))
+                    EdgeKind.RelatesTo -> PathEffect.dashPathEffect(floatArrayOf(5f, 5f))
+                },
             )
         }
 
