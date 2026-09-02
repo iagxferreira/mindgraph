@@ -177,6 +177,20 @@ class AppViewModel(
         return saved
     }
 
+    /**
+     * Sets or clears a deadline. Null actually clears it — unlike [setStatusNow], where an
+     * omitted due means "leave it alone" — so the editor has a way to take a date back off.
+     */
+    fun setDue(nodeId: NodeId, due: String?) {
+        scope.launch {
+            val node = nodeById(nodeId) ?: return@launch
+            val facet = node.task ?: return@launch
+            store.save(node.copy(task = facet.copy(due = due)))
+            refresh()
+            statusMessage = if (due == null) "Due date cleared" else "Due $due"
+        }
+    }
+
     // ---- edges ----
 
     fun linkRelates(sourceId: NodeId, targetId: NodeId) {

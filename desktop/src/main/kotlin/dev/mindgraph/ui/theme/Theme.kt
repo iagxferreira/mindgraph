@@ -20,6 +20,7 @@ val TextMuted = Color(0xFF8B909B)
 // Semantic state, kept separate from [Accent] so "selected" and "blocked" never read as the
 // same thing. Two hues only — status should be legible, not a rainbow.
 val Blocked = Color(0xFFE0A45E)
+val Overdue = Color(0xFFE0705E)
 val Done = Color(0xFF77BE97)
 
 /** A quieter variant of [Accent] for de-emphasized strokes/fills, kept as one hue not two. */

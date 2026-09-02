@@ -27,8 +27,10 @@ import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.AppViewModel
 import dev.mindgraph.state.TaskGraph
+import java.time.LocalDate
 import dev.mindgraph.ui.theme.Accent
 import dev.mindgraph.ui.theme.Blocked
+import dev.mindgraph.ui.theme.Overdue
 import dev.mindgraph.ui.theme.Done
 import dev.mindgraph.ui.theme.Ink
 import dev.mindgraph.ui.theme.SurfaceHigh
@@ -134,6 +136,8 @@ private fun TaskRow(
     val blockers = graph.blockers(node.id)
     val isDone = node.task?.status == TaskStatus.Done
     val unblocks = graph.unblockedCount(node.id)
+    val due = node.task?.dueDate
+    val isOverdue = due != null && !isDone && due.isBefore(LocalDate.now())
 
     Row(
         modifier = Modifier
@@ -171,6 +175,10 @@ private fun TaskRow(
                 buildString {
                     append(formatDuration(trackedSeconds))
                     if (isTracking) append(" · tracking")
+                    // The list is ordered by this, so it has to be legible in the list.
+                    if (due != null && !isDone) {
+                        append(if (isOverdue) " · overdue $due" else " · due $due")
+                    }
                     if (blockers.isNotEmpty()) {
                         append(" · needs ")
                         append(blockers.joinToString(", ") { it.title })
@@ -179,7 +187,11 @@ private fun TaskRow(
                     }
                 },
                 style = MaterialTheme.typography.labelSmall,
-                color = if (blockers.isNotEmpty()) Blocked else TextMuted,
+                color = when {
+                    isOverdue -> Overdue
+                    blockers.isNotEmpty() -> Blocked
+                    else -> TextMuted
+                },
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.widthIn(max = 520.dp),
