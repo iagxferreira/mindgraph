@@ -2,7 +2,6 @@ package dev.mindgraph.state
 
 import androidx.compose.runtime.mutableStateMapOf
 import dev.mindgraph.model.Edge
-import dev.mindgraph.model.EdgeKind
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -111,45 +110,6 @@ class GraphLayoutEngine {
     fun setTargets(positions: Map<String, Vec2>) {
         targets.clear()
         targets.putAll(positions)
-    }
-
-    /** Places prerequisites above their dependents, centering each prerequisite over its branch. */
-    fun setFlowRanks(ranks: Map<String, Int>) {
-        targets.clear()
-        if (ranks.isEmpty()) return
-
-        val nodeSpacing = 180f
-        val rowHeight = 150f
-        val dependencies = edges
-            .filter { it.kind == EdgeKind.DependsOn }
-            .groupBy({ it.targetId.value }, { it.sourceId.value })
-            .mapValues { (_, children) -> children.distinct().sorted() }
-        val parentIds = dependencies.values.flatten().toSet()
-        val roots = ranks.keys.filter { it !in parentIds }.sorted()
-        val xPositions = HashMap<String, Float>()
-        var leafCursor = 0
-
-        fun place(id: String): Float {
-            xPositions[id]?.let { return it }
-            val children = dependencies[id].orEmpty()
-            val x = if (children.isEmpty()) {
-                leafCursor++ * nodeSpacing
-            } else {
-                children.map(::place).average().toFloat()
-            }
-            xPositions[id] = x
-            return x
-        }
-
-        roots.forEach(::place)
-        ranks.keys.filter { it !in xPositions }.sorted().forEach(::place)
-
-        val centerX = ((xPositions.values.minOrNull() ?: 0f) + (xPositions.values.maxOrNull() ?: 0f)) / 2f
-        val maxRank = ranks.values.maxOrNull() ?: 0
-        val centerY = maxRank * rowHeight / 2f
-        xPositions.forEach { (id, x) ->
-            targets[id] = Vec2(x - centerX, (ranks[id] ?: 0) * rowHeight - centerY)
-        }
     }
 
     /**
