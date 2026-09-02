@@ -97,9 +97,15 @@ class AppViewModel(
         body: String = "",
         asTask: Boolean = false,
         due: String? = null,
+        assignee: String? = null,
     ): Node {
         val facet = if (asTask) TaskFacet(status = TaskStatus.Todo, due = due) else null
-        val created = store.create(title.trim().ifBlank { "Untitled" }, body, facet)
+        val created = store.create(
+            title.trim().ifBlank { "Untitled" },
+            body,
+            facet,
+            assignee = assignee?.trim()?.takeIf { it.isNotEmpty() },
+        )
         refresh()
         selectedNodeId = created.id
         statusMessage = if (asTask) "Task created" else "Note created"
@@ -170,11 +176,15 @@ class AppViewModel(
         due: String? = null,
         worker: Worker = Worker.Human,
         agent: String? = null,
+        assignee: String? = null,
     ): Node? {
         val node = nodeById(nodeId) ?: return null
         val facet = node.task ?: TaskFacet(status = status)
         val saved = store.save(
             node.copy(
+                // Like the due date: only replaced when one is given, so closing a task does
+                // not quietly unassign whoever it belonged to.
+                assignee = assignee?.trim()?.takeIf { it.isNotEmpty() } ?: node.assignee,
                 task = facet.copy(
                     status = status,
                     // A due date is only replaced when one is given: closing a task must not
@@ -211,6 +221,21 @@ class AppViewModel(
             store.save(node.copy(archived = archived))
             refresh()
             statusMessage = if (archived) "Archived" else "Restored"
+        }
+    }
+
+    /**
+     * Hands a node to someone, or takes it back. Assignment is a plan, not a record of work —
+     * it never changes whether a task is ready, only whose it is.
+     */
+    fun setAssignee(nodeId: NodeId, assignee: String?) {
+        scope.launch {
+            val node = nodeById(nodeId) ?: return@launch
+            val cleaned = assignee?.trim()?.takeIf { it.isNotEmpty() }
+            if (node.assignee == cleaned) return@launch
+            store.save(node.copy(assignee = cleaned))
+            refresh()
+            statusMessage = cleaned?.let { "Assigned to $it" } ?: "Unassigned"
         }
     }
 
