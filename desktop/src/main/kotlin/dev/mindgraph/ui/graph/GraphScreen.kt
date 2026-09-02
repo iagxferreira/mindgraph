@@ -17,11 +17,18 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -34,6 +41,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.width
 import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.NodeKind
@@ -67,12 +75,19 @@ fun GraphScreen(
     var mode by remember { mutableStateOf(LayoutMode.Mind) }
     var kindFilter by remember { mutableStateOf<NodeKind?>(null) }
     var showArchived by remember { mutableStateOf(false) }
+    var hideDone by remember { mutableStateOf(false) }
 
     val graph = viewModel.graph
 
     // Filtering hides nodes; it never moves them. Positions stay the layout's business, so a
     // node is where you left it when the filter comes back off.
-    val visible = GraphFilter.apply(viewModel.nodes, viewModel.edges, kindFilter, showArchived)
+    val visible = GraphFilter.apply(
+        viewModel.nodes,
+        viewModel.edges,
+        kindFilter,
+        showArchived,
+        includeDone = !hideDone,
+    )
     val kindCounts = viewModel.nodes.groupingBy { it.kind }.eachCount()
 
     LaunchedEffect(mode, viewModel.nodes, viewModel.edges) {
@@ -121,15 +136,29 @@ fun GraphScreen(
         }
 
         Column(
-            modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(16.dp)
+                .width(58.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(SurfaceHigh.copy(alpha = 0.94f))
+                .border(1.dp, Border, RoundedCornerShape(12.dp))
+                .padding(6.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             FloatingAction(Icons.Outlined.Add, "New note") { viewModel.createNode() }
+            ActionDivider()
             FloatingAction(
                 icon = Icons.Outlined.Inventory2,
                 description = if (showArchived) "Hide archived nodes" else "Show archived nodes",
                 isActive = showArchived,
             ) { showArchived = !showArchived }
+            FloatingAction(
+                icon = if (hideDone) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
+                description = if (hideDone) "Show done tasks" else "Hide done tasks",
+                isActive = hideDone,
+            ) { hideDone = !hideDone }
+            ActionDivider()
             FloatingAction(Icons.Outlined.Refresh, "Release pinned nodes") { viewModel.layout.unpinAll() }
             FloatingAction(Icons.Outlined.CenterFocusStrong, "Recenter view") { viewResetKey++ }
         }
@@ -183,6 +212,11 @@ fun GraphScreen(
             },
         )
     }
+}
+
+@Composable
+private fun ActionDivider() {
+    androidx.compose.material3.HorizontalDivider(color = Border.copy(alpha = 0.7f))
 }
 
 @Composable
@@ -269,29 +303,36 @@ private fun CountsPill(nodeCount: Int, edgeCount: Int, readyCount: Int) {
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun FloatingAction(
     icon: ImageVector,
     description: String,
     isActive: Boolean = false,
     onClick: () -> Unit,
 ) {
-    Box(
-        modifier = Modifier
-            .size(38.dp)
-            .clip(RoundedCornerShape(10.dp))
-            // A toggle has to look held down, or you cannot tell an emptier graph from a
-            // filtered one.
-            .background(if (isActive) Accent.copy(alpha = 0.18f) else SurfaceHigh)
-            .border(1.dp, if (isActive) Accent else Border, RoundedCornerShape(10.dp))
-            .clickable(onClick = onClick),
-        contentAlignment = Alignment.Center,
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(description) } },
+        state = rememberTooltipState(),
     ) {
-        Icon(
-            icon,
-            contentDescription = description,
-            tint = if (isActive) Accent else TextMuted,
-            modifier = Modifier.size(18.dp),
-        )
+        Box(
+            modifier = Modifier
+                .size(38.dp)
+                .clip(RoundedCornerShape(10.dp))
+                // A toggle has to look held down, or you cannot tell an emptier graph from a
+                // filtered one.
+                .background(if (isActive) Accent.copy(alpha = 0.18f) else Color.Transparent)
+                .border(1.dp, if (isActive) Accent else Color.Transparent, RoundedCornerShape(10.dp))
+                .clickable(onClick = onClick),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                icon,
+                contentDescription = description,
+                tint = if (isActive) Accent else TextMuted,
+                modifier = Modifier.size(18.dp),
+            )
+        }
     }
 }
 

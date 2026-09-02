@@ -40,6 +40,7 @@ import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.AppViewModel
 import dev.mindgraph.ui.shell.KindFilterBar
+import dev.mindgraph.ui.shell.DoneFilterToggle
 import dev.mindgraph.ui.shell.KindGlyph
 import dev.mindgraph.ui.shell.label
 import dev.mindgraph.ui.theme.Accent
@@ -91,14 +92,18 @@ fun NotesScreen(
 private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     val graph = viewModel.graph
     var kindFilter by remember { mutableStateOf<NodeKind?>(null) }
+    var hideDone by remember { mutableStateOf(false) }
 
-    val counts = viewModel.nodes.groupingBy { it.kind }.eachCount()
+    val filteredNodes = viewModel.nodes.filter {
+        !hideDone || it.task?.status != TaskStatus.Done
+    }
+    val counts = filteredNodes.groupingBy { it.kind }.eachCount()
     // Grouped rather than filtered-by-default: the whole vault stays visible, but a run of
     // notes no longer hides the four RFCs sitting among them.
     val sections = NodeKind.entries
         .filter { kindFilter == null || it == kindFilter }
         .mapNotNull { kind ->
-            viewModel.nodes.filter { it.kind == kind }.takeIf { it.isNotEmpty() }?.let { kind to it }
+            filteredNodes.filter { it.kind == kind }.takeIf { it.isNotEmpty() }?.let { kind to it }
         }
 
     Column(modifier = modifier.background(Surface)) {
@@ -113,6 +118,7 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 modifier = Modifier.weight(1f),
             )
             TextButton(onClick = { viewModel.createNode() }) { Text("New", color = Accent) }
+            DoneFilterToggle(hideDone = hideDone, onToggle = { hideDone = !hideDone })
         }
         KindFilterBar(
             selected = kindFilter,
