@@ -43,6 +43,12 @@ interface VaultAccess {
      * axis entirely, and a node created here has neither a status nor a place in the ready queue.
      */
     suspend fun createNote(title: String, body: String, kind: NodeKind, assignee: String?): Node
+
+    /**
+     * Adds to the end of a node's body. Strictly additive: every other field, and every byte
+     * already in the body, is left exactly as it was. Null when the node is gone.
+     */
+    suspend fun appendToBody(nodeId: NodeId, content: String): Node?
     suspend fun nodes(): List<Node>
 
     /** Total tracked seconds on a node, both yours and every agent's. */
@@ -63,6 +69,7 @@ fun mindGraphTools(vault: VaultAccess): List<McpTool> = listOf(
     getNodeTool(vault),
     createTaskTool(vault),
     createNoteTool(vault),
+    appendNodeBodyTool(vault),
     linkNodesTool(vault),
     updateStatusTool(vault),
 )
@@ -236,6 +243,46 @@ private fun createNoteTool(vault: VaultAccess) = McpTool(
         append("Created ${kind.slug} \"${node.title}\" with id ${node.id.value}.")
         assignee?.let { append(" Assigned to $it.") }
         append(" It is not a task, so it will not appear in ready work.")
+    }
+}
+
+private fun appendNodeBodyTool(vault: VaultAccess) = McpTool(
+    name = "append_node_body",
+    description =
+        "Add to the end of a node's body in the user's MindGraph vault — what you tried, what " +
+            "you found, what the next session needs to know. This only ever adds: it cannot " +
+            "change the title, kind, status, deadline or assignee, and it cannot alter or " +
+            "remove a single word already written there. Use it to keep a running record on " +
+            "the work itself; when the context has genuinely changed, create_note and link it " +
+            "instead.",
+    schema = buildJsonObject {
+        put("type", "object")
+        putJsonObject("properties") {
+            putJsonObject("node") {
+                put("type", "string")
+                put("description", "The node to add to: its id, or its exact title.")
+            }
+            putJsonObject("content") {
+                put("type", "string")
+                put("description",
+                    "Markdown to add at the end. It lands as its own entry, separated from " +
+                        "what is already there.")
+            }
+        }
+        putJsonArray("required") { add("node"); add("content") }
+        put("additionalProperties", false)
+    },
+) { arguments ->
+    val reference = arguments.requiredString("node")
+    val content = arguments.requiredString("content")
+
+    runBlocking {
+        val node = resolve(vault.nodes(), reference)
+        val saved = vault.appendToBody(node.id, content)
+            ?: throw IllegalStateException("Refused: \"${node.title}\" no longer exists.")
+
+        "Added ${content.trim().length} characters to the end of \"${saved.title}\". " +
+            "Nothing else about it changed."
     }
 }
 
