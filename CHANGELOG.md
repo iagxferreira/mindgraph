@@ -6,6 +6,12 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **Imported wikilinks resolve into edges.** A node can now answer to more than one name:
+  `aliases` in frontmatter, and the `memoryName` an import records. Claude's memory notes
+  link each other by slug while their titles are full sentences, so those links resolved to
+  nothing before — 20 of the 25 in a real vault become edges now. Shown in the editor under
+  "Also" and reported by `get_node`.
+
 - **Claude Code's memory notes import into the vault.** `~/.claude/projects/*/memory/*.md`
   was markdown with frontmatter and `[[wikilinks]]` already, sealed in a directory per
   project; the node list has an import button that brings it in as one graph. Re-runnable

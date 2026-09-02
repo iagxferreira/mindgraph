@@ -30,6 +30,9 @@ and what it unblocks. This file is the readable summary, not the source of truth
 - Nodes can be **archived** — kept with their id, links and tracked time, out of the
   graph and out of ready work — and **assigned** to a person or an agent, which filters
   what you are shown without ever gating what is ready.
+- **Imported wikilinks resolve into edges.** A node answers to its title, its slug, and
+  any alias — which is how a note linked as `[[its-memory-name]]` is found when its title
+  is a whole sentence.
 - **Claude Code's memory notes import into the vault**, re-runnably and read-only
   upstream, keeping `origin`, `originProject`, `memoryName` and `memoryType` in
   frontmatter. `memoryType` is deliberately *not* mapped onto `kind`: one says what a fact
@@ -44,8 +47,6 @@ unblocks.
 
 - **Import `~/.claude/plans/*.md` as RFC nodes.** They are RFCs already, without the
   label.
-- **Resolve imported wikilinks into edges**, slug-aware, or the import lands as
-  disconnected dots.
 - **Retrieval over MCP**: `search_notes`, then `related_notes` — walking edges rather
   than matching strings, and crossing projects, which per-project memory structurally
   cannot do.
