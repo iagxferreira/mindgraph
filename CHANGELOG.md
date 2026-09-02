@@ -6,6 +6,13 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **Claude Code's memory notes import into the vault.** `~/.claude/projects/*/memory/*.md`
+  was markdown with frontmatter and `[[wikilinks]]` already, sealed in a directory per
+  project; the node list has an import button that brings it in as one graph. Re-runnable
+  — files already imported are skipped — and read-only upstream: `~/.claude` is never
+  written back to. `origin`, `originProject`, `memoryName` and `memoryType` are kept in
+  frontmatter, so nothing about where a note came from is lost.
+
 - **The vault is watched.** A node written, edited or deleted outside the window — by an
   agent over MCP, an editor, or a git checkout — reaches the graph on its own, with no
   manual reload. Bursts are coalesced, so one save is one reload.
