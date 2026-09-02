@@ -17,6 +17,15 @@ data class Node(
     val kind: NodeKind = NodeKind.Note,
     val task: TaskFacet? = null,
     /**
+     * Who is meant to pick this up — a person or a named agent. Deliberately not the same as
+     * [WorkSession.worker], which records who actually spent time: one is a plan, the other is
+     * a fact, and a node can easily be assigned to one and worked by another.
+     *
+     * Free text, matching the names agents already give themselves in the session log. Absent
+     * rather than empty when nobody owns it, because most nodes have no owner.
+     */
+    val assignee: String? = null,
+    /**
      * Put away, but kept. Archiving is about visibility, not outcome — which is why it is not
      * a fifth [TaskStatus]: archiving a finished task must not overwrite the fact that it was
      * finished rather than abandoned.

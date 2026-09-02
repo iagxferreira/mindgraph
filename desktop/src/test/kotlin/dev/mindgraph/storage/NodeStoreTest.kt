@@ -315,4 +315,18 @@ class NodeStoreTest {
         assertEquals(listOf(other.id), loaded.relatesTo)
         assertEquals("Body text", loaded.body.trim())
     }
+
+    @Test
+    fun anAssigneeRoundTripsAndIsAbsentWhenNobodyOwnsIt() = runTest {
+        val vault = Vault(Files.createTempDirectory("mindgraph-assignee"))
+        val store = NodeStore(vault)
+        val created = store.create("Owned", "", TaskFacet(TaskStatus.Todo), assignee = "iago")
+
+        assertEquals("iago", store.load().single().assignee)
+
+        store.save(created.copy(assignee = null))
+        assertNull(store.load().single().assignee)
+        val document = Files.readString(vault.nodesDir.resolve("${created.slug}.md"))
+        assertFalse("assignee:" in document, document)
+    }
 }
