@@ -82,6 +82,24 @@ class NodeStore(private val vault: Vault) {
             .toSet()
     }
 
+    /**
+     * Nodes whose frontmatter has [key] set to [value].
+     *
+     * The companion to [frontmatterValues], for the same reason: the keys worth asking about
+     * are the ones [Node] does not model, so the question has to be put to the files.
+     */
+    suspend fun nodesWith(key: String, value: String): List<Node> = withContext(Dispatchers.IO) {
+        vault.prepare()
+        Files.list(vault.nodesDir).use { stream ->
+            stream.filter { it.toString().endsWith(".md") && Files.isRegularFile(it) }.toList()
+        }
+            .filter { path ->
+                runCatching { Files.readString(path) }.getOrNull()
+                    ?.let { Frontmatter.split(it).first.string(key) } == value
+            }
+            .mapNotNull { readNode(it) }
+    }
+
     suspend fun save(node: Node): Node = withContext(Dispatchers.IO) {
         val existingPath = findPathById(node.id)
         val desiredSlug = slugify(node.title)
