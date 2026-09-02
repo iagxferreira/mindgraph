@@ -60,6 +60,7 @@ import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import java.awt.Cursor
 import dev.mindgraph.model.Node
@@ -149,6 +150,20 @@ fun NoteEditorPanel(
                     assignee = node.assignee,
                     onSet = { viewModel.setAssignee(node.id, it) },
                 )
+            }
+            // Only imported notes have these today, and for them it is the name every other
+            // note links them by — worth seeing, and not editable here because it belongs to
+            // wherever the note came from.
+            if (node.aliases.isNotEmpty()) {
+                EditorControlRow(label = "Also") {
+                    Text(
+                        text = node.aliases.joinToString(", "),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextMuted,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
             EditorControlRow(
                 label = "Task",
