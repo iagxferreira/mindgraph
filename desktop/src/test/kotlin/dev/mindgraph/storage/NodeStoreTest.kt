@@ -278,4 +278,41 @@ class NodeStoreTest {
         val document = Files.readString(vault.nodesDir.resolve("${cleared.slug}.md"))
         assertFalse("due:" in document, document)
     }
+
+    @Test
+    fun archivedRoundTripsAndIsAbsentWhenFalse() = runTest {
+        val vault = Vault(Files.createTempDirectory("mindgraph-archive"))
+        val store = NodeStore(vault)
+        val created = store.create("Put me away")
+
+        val archived = store.save(created.copy(archived = true))
+        assertTrue(store.load().single().archived)
+
+        store.save(archived.copy(archived = false))
+        assertFalse(store.load().single().archived)
+        // `archived: false` on every file is noise on a flag that is false almost always.
+        val document = Files.readString(vault.nodesDir.resolve("${created.slug}.md"))
+        assertFalse("archived:" in document, document)
+    }
+
+    @Test
+    fun archivingKeepsEverythingElseAboutTheNode() = runTest {
+        val store = newStore()
+        val other = store.create("Another")
+        val created = store.create(
+            "Rich node",
+            "Body text",
+            TaskFacet(status = TaskStatus.Done, due = "2026-09-04"),
+        )
+        val linked = store.save(created.copy(relatesTo = listOf(other.id)))
+
+        store.save(linked.copy(archived = true))
+
+        val loaded = store.load().single { it.id == created.id }
+        assertTrue(loaded.archived)
+        assertEquals(TaskStatus.Done, loaded.task?.status)
+        assertEquals("2026-09-04", loaded.task?.due)
+        assertEquals(listOf(other.id), loaded.relatesTo)
+        assertEquals("Body text", loaded.body.trim())
+    }
 }

@@ -16,6 +16,12 @@ data class Node(
     val body: String,
     val kind: NodeKind = NodeKind.Note,
     val task: TaskFacet? = null,
+    /**
+     * Put away, but kept. Archiving is about visibility, not outcome — which is why it is not
+     * a fifth [TaskStatus]: archiving a finished task must not overwrite the fact that it was
+     * finished rather than abandoned.
+     */
+    val archived: Boolean = false,
     val dependsOn: List<NodeId> = emptyList(),
     val relatesTo: List<NodeId> = emptyList(),
     val createdAt: String,
@@ -24,6 +30,12 @@ data class Node(
     val slug: String,
 ) {
     val isTask: Boolean get() = task != null
+
+    /**
+     * Work that is still live: open, and not put away. Archived work stops blocking whatever
+     * depended on it — otherwise archiving one task would strand every task behind it.
+     */
+    val isLiveWork: Boolean get() = !archived && task?.status?.isOpen == true
 }
 
 /**
