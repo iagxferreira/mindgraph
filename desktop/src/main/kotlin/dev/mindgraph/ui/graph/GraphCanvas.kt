@@ -42,6 +42,7 @@ import dev.mindgraph.ui.theme.AccentSoft
 import dev.mindgraph.ui.theme.Blocked
 import dev.mindgraph.ui.theme.Done
 import dev.mindgraph.ui.theme.Ink
+import dev.mindgraph.ui.theme.TextMuted
 import dev.mindgraph.ui.theme.TextPrimary
 import kotlinx.coroutines.delay
 import kotlin.math.min
@@ -61,6 +62,8 @@ fun GraphCanvas(
     linkSourceId: NodeId?,
     viewResetKey: Int,
     trackedSecondsFor: (NodeId) -> Long,
+    /** Group name to the centre it was laid out around; empty in every mode but Cluster. */
+    clusterLabels: Map<String, Vec2> = emptyMap(),
     onSelectNode: (NodeId) -> Unit,
     onLinkTarget: (NodeId) -> Unit,
     modifier: Modifier = Modifier,
@@ -142,6 +145,20 @@ fun GraphCanvas(
                 end = toScreen(to),
                 strokeWidth = if (isDependency) 2.2f else 1.6f,
                 pathEffect = if (isDependency) null else PathEffect.dashPathEffect(floatArrayOf(5f, 5f)),
+            )
+        }
+
+        // Drawn between the edges and the nodes, in the hole a ring leaves at its own centre —
+        // a cluster nobody can name is just a blob that moved.
+        for ((name, centre) in clusterLabels) {
+            val caption = textMeasurer.measure(
+                text = name,
+                style = TextStyle(color = TextMuted, fontSize = 13.sp),
+            )
+            val at = toScreen(centre)
+            drawText(
+                textLayoutResult = caption,
+                topLeft = Offset(at.x - caption.size.width / 2f, at.y - caption.size.height / 2f),
             )
         }
 
