@@ -10,6 +10,16 @@ All notable changes to MindGraph will be tracked in this file.
   from, with every group named on the canvas. Nodes written in the vault itself group as
   "This vault", which is the split that matters once other projects' notes are in.
 
+- **`search_notes` over MCP.** Agents can now scan the current vault by title, alias, or
+  body text and receive each match's id, title, kind, and bounded context snippet. It is
+  deliberately a straight scan rather than a cache, so external vault edits are visible on
+  the next call.
+
+
+- **Codex repository instructions import.** The node list can now import nested
+  `AGENTS.md` files from `CODEX_WORKSPACE_ROOT` (defaulting to `~/workspace`) as
+  read-only, re-runnable context notes with their source path preserved.
+
 - **Claude's plan documents import as RFC nodes.** `~/.claude/plans/*.md` are design
   documents already — context, decision, rationale — and land as `kind: rfc`, linked to
   what the vault knows about the project their title names. A project mentioned only in the

@@ -79,7 +79,7 @@ class McpDispatcherTest {
 
         assertEquals(
             listOf(
-                "list_ready_tasks", "get_node", "create_task", "create_note",
+                "list_ready_tasks", "search_notes", "get_node", "create_task", "create_note",
                 "append_node_body", "link_nodes", "update_status",
             ),
             tools.map { it.jsonObject["name"]!!.jsonPrimitive.content },

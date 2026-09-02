@@ -6,6 +6,7 @@ import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.LinkOutcome
+import dev.mindgraph.state.NodeSearch
 import dev.mindgraph.state.TaskGraph
 import java.time.LocalDate
 import kotlinx.coroutines.runBlocking
@@ -66,6 +67,7 @@ interface VaultAccess {
 /** The tools MindGraph exposes to agents. */
 fun mindGraphTools(vault: VaultAccess): List<McpTool> = listOf(
     listReadyTasksTool(vault),
+    searchNotesTool(vault),
     getNodeTool(vault),
     createTaskTool(vault),
     createNoteTool(vault),
@@ -148,6 +150,47 @@ private fun getNodeTool(vault: VaultAccess) = McpTool(
             val body = node.body.trim()
             append("\n")
             append(if (body.isEmpty()) "(no body)" else body)
+        }
+    }
+}
+
+private fun searchNotesTool(vault: VaultAccess) = McpTool(
+    name = "search_notes",
+    description =
+        "Find notes, RFCs, and tasks in the MindGraph vault by text in their title, aliases, " +
+            "or body. Returns each matching node's id, title, kind, and a small context snippet " +
+            "so an agent can choose what to read next.",
+    schema = buildJsonObject {
+        put("type", "object")
+        putJsonObject("properties") {
+            putJsonObject("query") {
+                put("type", "string")
+                put("description", "Text to find in node titles, aliases, and bodies.")
+            }
+            putJsonObject("limit") {
+                put("type", "integer")
+                put("description", "How many matches to return. Defaults to 10, maximum 100.")
+            }
+        }
+        putJsonArray("required") { add("query") }
+        put("additionalProperties", false)
+    },
+) { arguments ->
+    val query = arguments.requiredString("query")
+    val limit = arguments["limit"]?.jsonPrimitive?.contentOrNull?.toIntOrNull() ?: DEFAULT_LIMIT
+
+    runBlocking {
+        val matches = NodeSearch.search(vault.nodes(), query, limit)
+        if (matches.isEmpty()) {
+            "No nodes match \"$query\"."
+        } else {
+            buildString {
+                append("${matches.size} node(s) match \"$query\":\n")
+                matches.forEach { match ->
+                    append("- ${match.node.title} (${match.node.id.value}) — ${match.node.kind.slug}\n")
+                    append("  ${match.snippet}\n")
+                }
+            }.trimEnd()
         }
     }
 }

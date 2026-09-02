@@ -16,6 +16,7 @@ import dev.mindgraph.model.currentUnixTimestamp
 import dev.mindgraph.storage.MemoryImport
 import dev.mindgraph.storage.NodeStore
 import dev.mindgraph.storage.PlanImport
+import dev.mindgraph.storage.CodexImport
 import dev.mindgraph.storage.SessionLog
 import dev.mindgraph.storage.VaultWatcher
 import dev.mindgraph.storage.WikiLinks
@@ -289,6 +290,42 @@ class AppViewModel(
 
     fun importClaudeMemory() {
         scope.launch { importClaudeMemoryNow() }
+    }
+
+    /** Copies repository-level Codex instruction files into the vault, skipping known origins. */
+    suspend fun importCodexAgentsNow(workspaceRoot: Path = defaultCodexWorkspaceRoot()): CodexImportResult {
+        val files = CodexImport.scan(workspaceRoot)
+        val alreadyImported = store.frontmatterValues(CodexImport.KEY_ORIGIN)
+        var imported = 0
+        var skipped = 0
+        var unreadable = 0
+        for (file in files) {
+            if (file.toAbsolutePath().toString() in alreadyImported) {
+                skipped++
+                continue
+            }
+            val instruction = CodexImport.read(file, workspaceRoot)
+            if (instruction == null) {
+                unreadable++
+                continue
+            }
+            store.create(
+                title = instruction.title,
+                body = instruction.body,
+                task = null,
+                kind = NodeKind.Note,
+                extras = CodexImport.extrasFor(instruction),
+            )
+            imported++
+        }
+        refresh()
+        val result = CodexImportResult(imported, skipped, unreadable, files.size)
+        statusMessage = result.summary()
+        return result
+    }
+
+    fun importCodexAgents() {
+        scope.launch { importCodexAgentsNow() }
     }
 
     /** Titles linked in this node's body that don't exist yet — offer to create them. */
@@ -602,9 +639,29 @@ data class MemoryImportResult(
     }
 }
 
+data class CodexImportResult(
+    val imported: Int,
+    val skipped: Int,
+    val unreadable: Int,
+    val filesFound: Int,
+) {
+    fun summary(): String = when {
+        filesFound == 0 -> "No Codex AGENTS.md files found"
+        imported == 0 && skipped > 0 -> "Codex instructions already imported ($skipped)"
+        imported == 0 -> "No Codex instructions to import"
+        skipped > 0 -> "Imported $imported Codex instruction(s), $skipped already there"
+        else -> "Imported $imported Codex instruction(s)"
+    }
+}
+
 /** `~/.claude/projects`, where Claude Code keeps a memory directory per project. */
 fun defaultClaudeProjectsRoot(): Path =
     Paths.get(System.getProperty("user.home") ?: ".", ".claude", "projects")
+
+/** Workspace root containing repositories with Codex `AGENTS.md` instructions. */
+fun defaultCodexWorkspaceRoot(): Path =
+    System.getenv("CODEX_WORKSPACE_ROOT")?.takeIf { it.isNotBlank() }?.let(Paths::get)
+        ?: Paths.get(System.getProperty("user.home") ?: ".", "workspace")
 
 /** What one run of the plan import did. */
 data class PlanImportResult(

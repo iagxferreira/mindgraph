@@ -56,6 +56,7 @@ in a file you will notice later.
 | Tool | What it is for |
 | --- | --- |
 | `list_ready_tasks` | What can actually be started now, ranked. The question to ask first |
+| `search_notes` | Find nodes by title, alias, or body text, with a context snippet |
 | `get_node` | Read one node in full when a ready-task summary is not enough |
 | `create_task` | Capture, with an optional deadline |
 | `create_note` | Capture what is *not* work — a note, RFC or reference, with no status |
@@ -63,7 +64,7 @@ in a file you will notice later.
 | `link_nodes` | `depends_on` or `relates_to`. Cycles are refused |
 | `update_status` | `todo` / `doing` / `done` / `dropped`, and what the change unblocked |
 
-Seven tools, kept deliberately few: every schema is sent on every request of every
+Eight tools, kept deliberately few: every schema is sent on every request of every
 session, so the surface is the loop — orient, capture, structure, close — and nothing
 else. Destructive and fiddly operations stay in the app, where you can see what you
 are doing.
@@ -249,6 +250,10 @@ unrelated markdown file sitting in the folder is left alone.
 If you use Claude Code, the import button on the node list pulls in
 `~/.claude/projects/*/memory/*.md` — every project's memory notes as one graph, with the
 links between them resolved. It is safe to press again as those notes accumulate.
+
+The adjacent Codex import button pulls in repository instructions from nested `AGENTS.md`
+files under `CODEX_WORKSPACE_ROOT` (defaulting to `~/workspace`). These files are copied as
+read-only context notes, and repeated imports skip paths already present in the vault.
 
 ## Useful commands
 
