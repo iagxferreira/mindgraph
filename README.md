@@ -81,11 +81,12 @@ in a file you will notice later.
 | Tool | What it is for |
 | --- | --- |
 | `list_ready_tasks` | What can actually be started now, ranked. The question to ask first |
+| `get_node` | Read one node in full when a ready-task summary is not enough |
 | `create_task` | Capture, with an optional deadline |
 | `link_nodes` | `depends_on` or `relates_to`. Cycles are refused |
 | `update_status` | `todo` / `doing` / `done` / `dropped`, and what the change unblocked |
 
-Four tools, kept deliberately few: every schema is sent on every request of every
+Five tools, kept deliberately few: every schema is sent on every request of every
 session, so the surface is the loop — orient, capture, structure, close — and nothing
 else. Destructive and fiddly operations stay in the app, where you can see what you
 are doing.
@@ -94,10 +95,21 @@ Point a client at it while the app is running:
 
 ```bash
 claude mcp add --transport http mindgraph http://127.0.0.1:4319/mcp
+codex mcp add mindgraph --url http://127.0.0.1:4319/mcp
 ```
+
+Other agents should configure a Streamable HTTP MCP server named `mindgraph` with the
+same URL. The server is loopback-only by default, so agents on another machine need an
+SSH tunnel or another deliberately secured transport rather than opening the port.
 
 Set `MINDGRAPH_MCP_PORT` to move it. If the port is busy the app says so and starts
 anyway — MindGraph without MCP is still MindGraph.
+
+Agents working on this repository should also load the workflow skill at
+`.claude/skills/mindgraph-workflow/SKILL.md`. The file is plain Markdown, so agents
+without Claude-style skills can treat it as their system or project instructions. Its
+important rule is simple: ask `list_ready_tasks`, create or find the work node, mark it
+`doing` with `update_status`, then close it when the work is finished.
 
 **Machine labour.** Moving a task to `doing` starts the clock and closing it stops the
 clock, so elapsed time is a consequence of the work being tracked rather than a second

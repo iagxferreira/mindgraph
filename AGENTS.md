@@ -6,8 +6,9 @@ exposes to coding agents over MCP. Keep changes small, testable, and scoped to t
 owning layer.
 
 If you are an agent working on this repository, read
-`.claude/skills/mindgraph-workflow/SKILL.md` first. The short version: record the work
-in the vault before doing it.
+`.claude/skills/mindgraph-workflow/SKILL.md` first. Claude can load it as a skill;
+other agents should treat the Markdown file as their project workflow instructions.
+The short version: record the work in the vault before doing it.
 
 ## Project Structure
 
@@ -53,7 +54,12 @@ for as long as the window is open. `ConnectionRefused` means the app is closed.
 
 ```bash
 claude mcp add --transport http mindgraph http://127.0.0.1:4319/mcp
+codex mcp add mindgraph --url http://127.0.0.1:4319/mcp
 ```
+
+Other agents should configure a Streamable HTTP MCP server named `mindgraph` at
+`http://127.0.0.1:4319/mcp`. If an agent runs outside the local machine, use a
+deliberate secure tunnel instead of exposing the loopback server directly.
 
 Adding a tool means adding to the surface every request in every session carries, so a
 tool earns its place by enabling the loop — orient, capture, structure, close — not by

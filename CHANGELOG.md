@@ -22,6 +22,8 @@ All notable changes to MindGraph will be tracked in this file.
 - **Assignment.** A node can belong to a person or an agent; `list_ready_tasks` narrows to
   an assignee. Assignment filters, it never gates.
 - A `mindgraph-workflow` skill recording the working agreement for agents on this repo.
+- Agent setup docs for Claude, Codex, and other Streamable HTTP MCP clients, including
+  how to reuse the MindGraph workflow skill outside Claude.
 
 - A pannable/zoomable graph view of notes and links, with node size encoding
   cumulative tracked time per note, in Mind (force-directed) and Flow (layered by
