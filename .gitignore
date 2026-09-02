@@ -1,0 +1,3 @@
+# IDE settings are per-developer, not per-repository.
+.idea/
+*.iml
