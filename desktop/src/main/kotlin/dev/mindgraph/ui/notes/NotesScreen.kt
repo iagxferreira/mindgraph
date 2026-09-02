@@ -140,6 +140,7 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             // is grouped from the same filtered list — and it was spending width to do it.
             TextButton(onClick = { viewModel.createNode() }) { Text("New", color = Accent) }
             ImportMemoryButton(onImport = { viewModel.importClaudeContext() })
+            ImportCodexButton(onImport = { viewModel.importCodexAgents() })
             DoneFilterToggle(hideDone = hideDone, onToggle = { hideDone = !hideDone })
             ArchiveFilterMenu(showArchived = showArchived, onChange = { showArchived = it })
         }
@@ -238,6 +239,25 @@ private fun SectionHeader(kind: NodeKind, count: Int) {
 @OptIn(ExperimentalMaterial3Api::class)
 private fun ImportMemoryButton(onImport: () -> Unit) {
     val description = "Import notes and plans from Claude"
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(description) } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(onClick = onImport) {
+            Icon(
+                imageVector = Icons.Outlined.Download,
+                contentDescription = description,
+                tint = TextMuted,
+            )
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun ImportCodexButton(onImport: () -> Unit) {
+    val description = "Import Codex AGENTS.md files"
     TooltipBox(
         positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
         tooltip = { PlainTooltip { Text(description) } },
