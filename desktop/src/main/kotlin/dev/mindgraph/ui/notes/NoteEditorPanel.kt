@@ -61,6 +61,15 @@ import dev.mindgraph.ui.theme.Border
 import dev.mindgraph.ui.theme.Done
 import dev.mindgraph.ui.theme.TextMuted
 import dev.mindgraph.ui.theme.TextPrimary
+import java.time.LocalDate
+import dev.mindgraph.ui.theme.Overdue
+import dev.mindgraph.ui.theme.SurfaceHigh
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.Key
+import androidx.compose.foundation.border
 
 private const val EditModeRatio = 1f
 private const val SplitModeRatio = 0.5f
@@ -115,6 +124,12 @@ fun NoteEditorPanel(
                         onClick = { viewModel.setStatus(node.id, status) },
                     )
                 }
+                DueChip(
+                    due = node.task?.due,
+                    isOverdue = node.task?.dueDate?.isBefore(LocalDate.now()) == true &&
+                        node.task?.status != TaskStatus.Done,
+                    onSet = { viewModel.setDue(node.id, it) },
+                )
                 TextButton(onClick = { viewModel.demoteToNote(node.id) }) {
                     Text("Not a task", style = MaterialTheme.typography.labelSmall, color = TextMuted)
                 }
@@ -198,6 +213,89 @@ fun NoteEditorPanel(
             onStartLink = onStartLink,
             onCancelLink = onCancelLink,
         )
+    }
+}
+
+/**
+ * The deadline, shown and editable in place. A date is typed rather than picked: the vault
+ * stores text, an ISO date is what the ranking reads, and a calendar widget would be a lot of
+ * surface for a field whose whole job is to be one line of frontmatter.
+ *
+ * Nothing is committed until the text parses, so a half-typed date cannot clear a real one.
+ */
+@Composable
+private fun DueChip(due: String?, isOverdue: Boolean, onSet: (String?) -> Unit) {
+    var editing by remember(due) { mutableStateOf(false) }
+    var draft by remember(due) { mutableStateOf(due.orEmpty()) }
+
+    val parsed = runCatching { LocalDate.parse(draft.trim()) }.getOrNull()
+    val isDraftUsable = draft.isBlank() || parsed != null
+
+    fun commit() {
+        if (!isDraftUsable) return
+        onSet(draft.trim().takeIf { it.isNotEmpty() })
+        editing = false
+    }
+
+    if (editing) {
+        BasicTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            singleLine = true,
+            textStyle = MaterialTheme.typography.labelMedium.copy(
+                color = if (isDraftUsable) TextPrimary else Overdue,
+            ),
+            cursorBrush = SolidColor(Accent),
+            modifier = Modifier
+                .width(112.dp)
+                .clip(RoundedCornerShape(7.dp))
+                .background(SurfaceHigh)
+                .border(1.dp, if (isDraftUsable) Border else Overdue, RoundedCornerShape(7.dp))
+                .padding(horizontal = 9.dp, vertical = 6.dp)
+                .onPreviewKeyEvent { event ->
+                    if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                    when (event.key) {
+                        Key.Enter, Key.NumPadEnter -> { commit(); true }
+                        Key.Escape -> { draft = due.orEmpty(); editing = false; true }
+                        else -> false
+                    }
+                },
+            decorationBox = { field ->
+                if (draft.isEmpty()) {
+                    Text(
+                        "yyyy-mm-dd",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = TextMuted,
+                    )
+                }
+                field()
+            },
+        )
+    } else {
+        val tint = if (isOverdue) Overdue else TextMuted
+        Row(
+            modifier = Modifier
+                .clip(RoundedCornerShape(7.dp))
+                .background(SurfaceHigh)
+                .clickable { editing = true }
+                .padding(horizontal = 9.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                if (due == null) "+ due" else if (isOverdue) "overdue $due" else "due $due",
+                style = MaterialTheme.typography.labelMedium,
+                color = tint,
+            )
+            if (due != null) {
+                Text(
+                    "×",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = TextMuted,
+                    modifier = Modifier.clickable { onSet(null) },
+                )
+            }
+        }
     }
 }
 

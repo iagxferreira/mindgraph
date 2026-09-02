@@ -7,6 +7,7 @@ import java.nio.file.Files
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -262,5 +263,19 @@ class NodeStoreTest {
         store.save(created.copy(kind = NodeKind.Reference))
 
         assertEquals(NodeKind.Reference, store.load().single().kind)
+    }
+
+    @Test
+    fun clearingADueDateRemovesTheKeyRatherThanWritingAnEmptyOne() = runTest {
+        val vault = Vault(Files.createTempDirectory("mindgraph-due-clear"))
+        val store = NodeStore(vault)
+        val created = store.create("Has a deadline", "", TaskFacet(TaskStatus.Todo, due = "2026-09-04"))
+
+        val cleared = store.save(created.copy(task = created.task!!.copy(due = null)))
+
+        assertNull(store.load().single().task?.due)
+        // An empty `due:` would read back as a deadline nobody can parse rather than as none.
+        val document = Files.readString(vault.nodesDir.resolve("${cleared.slug}.md"))
+        assertFalse("due:" in document, document)
     }
 }
