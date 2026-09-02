@@ -15,6 +15,7 @@ import dev.mindgraph.model.Worker
 import dev.mindgraph.model.currentUnixTimestamp
 import dev.mindgraph.storage.NodeStore
 import dev.mindgraph.storage.SessionLog
+import dev.mindgraph.storage.VaultWatcher
 import dev.mindgraph.storage.WikiLinks
 import dev.mindgraph.storage.toEdges
 import java.time.Instant
@@ -23,6 +24,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 
 /**
@@ -32,6 +34,12 @@ import kotlinx.coroutines.launch
 class AppViewModel(
     private val store: NodeStore,
     private val sessionLog: SessionLog,
+    /**
+     * Optional: when present, changes written to the vault by anything other than this window
+     * — an agent over MCP, an editor, a git checkout — reload the graph on their own. Absent in
+     * tests that drive the store directly and have nothing to watch for.
+     */
+    private val watcher: VaultWatcher? = null,
 ) {
     val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     val layout = GraphLayoutEngine()
@@ -66,6 +74,12 @@ class AppViewModel(
 
     init {
         scope.launch { refresh() }
+
+        // The vault, not this class, is the source of truth — so an outside write is not a
+        // special case to merge, it is just the same load the app already does on startup.
+        watcher?.let { source ->
+            scope.launch { source.changes().collect { refresh() } }
+        }
     }
 
     suspend fun refresh() {
