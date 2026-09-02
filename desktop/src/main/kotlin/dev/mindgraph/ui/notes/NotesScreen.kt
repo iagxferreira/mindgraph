@@ -17,12 +17,24 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Inventory2
+import androidx.compose.material.icons.outlined.Unarchive
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
 import androidx.compose.material3.VerticalDivider
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -92,10 +104,12 @@ fun NotesScreen(
 private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     val graph = viewModel.graph
     var kindFilter by remember { mutableStateOf<NodeKind?>(null) }
-    var hideDone by remember { mutableStateOf(false) }
+    var hideDone by remember { mutableStateOf(true) }
+    var showArchived by remember { mutableStateOf(false) }
 
     val filteredNodes = viewModel.nodes.filter {
-        !hideDone || it.task?.status != TaskStatus.Done
+        it.archived == showArchived &&
+            (showArchived || !hideDone || it.task?.status != TaskStatus.Done)
     }
     val counts = filteredNodes.groupingBy { it.kind }.eachCount()
     // Grouped rather than filtered-by-default: the whole vault stays visible, but a run of
@@ -120,6 +134,7 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             Text("${filteredNodes.size} total", style = MaterialTheme.typography.labelSmall, color = TextMuted)
             TextButton(onClick = { viewModel.createNode() }) { Text("New", color = Accent) }
             DoneFilterToggle(hideDone = hideDone, onToggle = { hideDone = !hideDone })
+            ArchiveFilterMenu(showArchived = showArchived, onChange = { showArchived = it })
         }
         KindFilterBar(
             selected = kindFilter,
@@ -143,6 +158,41 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                         onClick = { viewModel.selectNode(node.id) },
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun ArchiveFilterMenu(showArchived: Boolean, onChange: (Boolean) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    val description = if (showArchived) "Show active nodes" else "Show archived nodes"
+
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(description) } },
+        state = rememberTooltipState(),
+    ) {
+        Box {
+            IconButton(onClick = { open = true }) {
+                Icon(
+                    imageVector = if (showArchived) Icons.Outlined.Unarchive else Icons.Outlined.Inventory2,
+                    contentDescription = description,
+                    tint = if (showArchived) Accent else TextMuted,
+                )
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                DropdownMenuItem(
+                    text = { Text("Active nodes") },
+                    leadingIcon = { Icon(Icons.Outlined.Unarchive, contentDescription = null) },
+                    onClick = { onChange(false); open = false },
+                )
+                DropdownMenuItem(
+                    text = { Text("Archived nodes") },
+                    leadingIcon = { Icon(Icons.Outlined.Inventory2, contentDescription = null) },
+                    onClick = { onChange(true); open = false },
+                )
             }
         }
     }

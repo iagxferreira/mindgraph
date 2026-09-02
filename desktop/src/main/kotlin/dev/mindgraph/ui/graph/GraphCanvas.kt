@@ -76,6 +76,8 @@ fun GraphCanvas(
     }
 
     LaunchedEffect(nodeIds, edges, layout.mode) {
+        // Keep hidden archive nodes out of the layout too; invisible nodes must not reserve space.
+        layout.sync(nodeIds, edges)
         while (true) {
             layout.step()
             delay(16)
