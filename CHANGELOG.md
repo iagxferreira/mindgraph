@@ -6,6 +6,23 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **A control that hides node labels.** At vault scale the canvas drew a title under every
+  node and they overlapped into noise. The Graph tab's action rail can now turn them off, so
+  the shape of the graph reads without the text; selecting a node still names it in the card,
+  so nothing becomes unidentifiable. Cluster captions stay — there are few of them and the
+  mode means nothing without them.
+
+### Changed
+
+- **Filtering now rebuilds the layout.** Hiding archived nodes, done tasks or a kind used to
+  leave the survivors exactly where they were, laid out for a count that no longer existed —
+  and for Flow and Cluster the layout was never recomputed at all, because the effect was
+  keyed on the unfiltered vault. The engine is now driven by the visible set: ranks and
+  groups come from the visible subgraph, and a filter toggle reflows the unpinned nodes so
+  the picture is built from the number of notes actually on screen. Pinned nodes keep their
+  position — a pin is a placement you chose by dragging. Blocking is still computed over the
+  whole vault, since a hidden node still blocks what depends on it.
+
 - **A Cluster layout mode**, grouping the graph by the repository each node was imported
   from, with every group named on the canvas. Nodes written in the vault itself group as
   "This vault", which is the split that matters once other projects' notes are in.
