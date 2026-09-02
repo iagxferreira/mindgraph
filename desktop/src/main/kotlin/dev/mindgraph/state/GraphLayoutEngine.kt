@@ -18,14 +18,20 @@ data class Vec2(val x: Float, val y: Float) {
  * Mind mode is a force-directed layout for associative thinking; Flow mode is a layered
  * left-to-right layout for dependencies. They are separate because springs actively scramble
  * the ordering a dependency graph exists to show.
+ *
+ * Cluster mode groups by the repository a node was imported from — the axis that makes a
+ * cross-project brain legible. Kind was considered for this and argued down: it fights the
+ * force-directed layout and the kinds are lopsided.
  */
-enum class LayoutMode { Mind, Flow }
+enum class LayoutMode { Mind, Flow, Cluster }
 
 class GraphLayoutEngine {
     val positions = mutableStateMapOf<String, Vec2>()
     private val velocities = HashMap<String, Vec2>()
     private val pinned = HashSet<String>()
-    private val flowTargets = HashMap<String, Vec2>()
+    // Flow and Cluster both place nodes at computed positions and ease toward them; only
+    // the placement rule differs, so they share one target map and one stepper.
+    private val targets = HashMap<String, Vec2>()
     private val random = Random(42)
     private var nodeIds: List<String> = emptyList()
     private var edges: List<Edge> = emptyList()
@@ -53,7 +59,7 @@ class GraphLayoutEngine {
         positions.keys.retainAll(idSet)
         velocities.keys.retainAll(idSet)
         pinned.retainAll(idSet)
-        flowTargets.keys.retainAll(idSet)
+        targets.keys.retainAll(idSet)
         for (id in ids) {
             if (id !in positions) {
                 val angle = random.nextDouble(0.0, 2 * Math.PI)
@@ -68,7 +74,7 @@ class GraphLayoutEngine {
 
     /** Places prerequisites above their dependents, centering each prerequisite over its branch. */
     fun setFlowRanks(ranks: Map<String, Int>) {
-        flowTargets.clear()
+        targets.clear()
         if (ranks.isEmpty()) return
 
         val nodeSpacing = 180f
@@ -101,22 +107,75 @@ class GraphLayoutEngine {
         val maxRank = ranks.values.maxOrNull() ?: 0
         val centerY = maxRank * rowHeight / 2f
         xPositions.forEach { (id, x) ->
-            flowTargets[id] = Vec2(x - centerX, (ranks[id] ?: 0) * rowHeight - centerY)
+            targets[id] = Vec2(x - centerX, (ranks[id] ?: 0) * rowHeight - centerY)
+        }
+    }
+
+    /**
+     * Groups nodes into rings, one per project, laid out around the origin.
+     *
+     * Group centres go on a circle sized by how many groups there are, and members go on a
+     * ring inside their group sized by how many members it has — so a project with three
+     * notes stays tight and one with thirty does not swallow its neighbours. Groups are
+     * ordered by name so the picture does not reshuffle between renders.
+     */
+    fun setClusters(groups: Map<String, String>) {
+        targets.clear()
+        if (groups.isEmpty()) return
+
+        val members = groups.entries
+            .groupBy({ it.value }, { it.key })
+            .mapValues { (_, ids) -> ids.sorted() }
+        val names = members.keys.sorted()
+
+        // One group is not a cluster; centring it beats pushing it off to one side.
+        val galaxyRadius = if (names.size < 2) 0f else 260f + names.size * 52f
+
+        names.forEachIndexed { index, name ->
+            val ids = members.getValue(name)
+            val angle = 2 * Math.PI * index / names.size
+            val cx = (cos(angle) * galaxyRadius).toFloat()
+            val cy = (sin(angle) * galaxyRadius).toFloat()
+
+            if (ids.size == 1) {
+                targets[ids.single()] = Vec2(cx, cy)
+                return@forEachIndexed
+            }
+            val ringRadius = 46f + ids.size * 13f
+            ids.forEachIndexed { member, id ->
+                val theta = 2 * Math.PI * member / ids.size
+                targets[id] = Vec2(
+                    cx + (cos(theta) * ringRadius).toFloat(),
+                    cy + (sin(theta) * ringRadius).toFloat(),
+                )
+            }
+        }
+    }
+
+    /** Where each group's label belongs: the centre it was laid out around. */
+    fun clusterCentres(groups: Map<String, String>): Map<String, Vec2> {
+        if (groups.isEmpty()) return emptyMap()
+        val names = groups.values.distinct().sorted()
+        val galaxyRadius = if (names.size < 2) 0f else 260f + names.size * 52f
+        return names.withIndex().associate { (index, name) ->
+            val angle = 2 * Math.PI * index / names.size
+            name to Vec2((cos(angle) * galaxyRadius).toFloat(), (sin(angle) * galaxyRadius).toFloat())
         }
     }
 
     fun step() {
         when (mode) {
             LayoutMode.Mind -> stepForces()
-            LayoutMode.Flow -> stepTowardFlowTargets()
+            LayoutMode.Flow -> stepTowardTargets()
+            LayoutMode.Cluster -> stepTowardTargets()
         }
     }
 
-    private fun stepTowardFlowTargets() {
+    private fun stepTowardTargets() {
         val easing = 0.18f
         for (id in nodeIds) {
             if (id in pinned) continue
-            val target = flowTargets[id] ?: continue
+            val target = targets[id] ?: continue
             val current = positions[id] ?: continue
             positions[id] = current + (target - current) * easing
         }
