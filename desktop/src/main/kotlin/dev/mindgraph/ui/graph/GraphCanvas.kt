@@ -64,6 +64,12 @@ fun GraphCanvas(
     trackedSecondsFor: (NodeId) -> Long,
     /** Group name to the centre it was laid out around; empty in every mode but Cluster. */
     clusterLabels: Map<String, Vec2> = emptyMap(),
+    /**
+     * Whether to draw each node's title under it. Off is for reading the shape of the graph
+     * rather than its contents: at vault scale the titles overlap into noise, and the selected
+     * node's card still names whatever you click, so nothing becomes unidentifiable.
+     */
+    showLabels: Boolean = true,
     onSelectNode: (NodeId) -> Unit,
     onLinkTarget: (NodeId) -> Unit,
     modifier: Modifier = Modifier,
@@ -188,20 +194,24 @@ fun GraphCanvas(
                 ),
             )
 
-            val labelText = if (layout.mode == dev.mindgraph.state.LayoutMode.Flow) {
-                node.title.take(24).let { if (node.title.length > 24) "$it..." else it }
-            } else {
-                node.title
-            }
-            val label = textMeasurer.measure(
-                text = labelText,
-                style = TextStyle(color = TextPrimary, fontSize = 12.sp),
-            )
-            if (layout.mode != dev.mindgraph.state.LayoutMode.Flow || zoom >= 0.7f || emphasized) {
-                drawText(
-                    textLayoutResult = label,
-                    topLeft = Offset(screen.x - label.size.width / 2f, screen.y + radius + 4f),
+            // Measuring is the expensive half, so the check wraps it rather than just the draw:
+            // with labels off there is no reason to lay out text for every node every frame.
+            if (showLabels) {
+                val labelText = if (layout.mode == dev.mindgraph.state.LayoutMode.Flow) {
+                    node.title.take(24).let { if (node.title.length > 24) "$it..." else it }
+                } else {
+                    node.title
+                }
+                val label = textMeasurer.measure(
+                    text = labelText,
+                    style = TextStyle(color = TextPrimary, fontSize = 12.sp),
                 )
+                if (layout.mode != dev.mindgraph.state.LayoutMode.Flow || zoom >= 0.7f || emphasized) {
+                    drawText(
+                        textLayoutResult = label,
+                        topLeft = Offset(screen.x - label.size.width / 2f, screen.y + radius + 4f),
+                    )
+                }
             }
         }
     }

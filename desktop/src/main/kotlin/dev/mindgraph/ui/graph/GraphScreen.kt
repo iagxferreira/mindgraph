@@ -17,6 +17,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -78,6 +79,7 @@ fun GraphScreen(
     var kindFilter by remember { mutableStateOf<NodeKind?>(null) }
     var showArchived by remember { mutableStateOf(false) }
     var hideDone by remember { mutableStateOf(false) }
+    var showLabels by remember { mutableStateOf(true) }
 
     val graph = viewModel.graph
 
@@ -131,6 +133,7 @@ fun GraphScreen(
             } else {
                 emptyMap()
             },
+            showLabels = showLabels,
             onSelectNode = { viewModel.selectNode(it) },
             onLinkTarget = { targetId ->
                 val sourceId = linkSourceId
@@ -186,6 +189,13 @@ fun GraphScreen(
                 description = if (hideDone) "Show done tasks" else "Hide done tasks",
                 isActive = hideDone,
             ) { hideDone = !hideDone }
+            FloatingAction(
+                icon = Icons.Outlined.TextFields,
+                description = if (showLabels) "Hide node labels" else "Show node labels",
+                // Active means "this control is changing the picture", which for the other
+                // toggles is their true state and here is the off state.
+                isActive = !showLabels,
+            ) { showLabels = !showLabels }
             ActionDivider()
             FloatingAction(Icons.Outlined.Refresh, "Release pinned nodes") { viewModel.layout.unpinAll() }
             FloatingAction(Icons.Outlined.CenterFocusStrong, "Recenter view") { viewResetKey++ }
