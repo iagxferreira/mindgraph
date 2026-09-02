@@ -53,10 +53,86 @@ interface VaultAccess {
 /** The tools MindGraph exposes to agents. */
 fun mindGraphTools(vault: VaultAccess): List<McpTool> = listOf(
     listReadyTasksTool(vault),
+    getNodeTool(vault),
     createTaskTool(vault),
     linkNodesTool(vault),
     updateStatusTool(vault),
 )
+
+private fun getNodeTool(vault: VaultAccess) = McpTool(
+    name = "get_node",
+    description =
+        "Read one node from the user's MindGraph vault in full — its body, kind, status, " +
+            "deadline, assignee, and what it depends on. list_ready_tasks gives you a line; " +
+            "some nodes are a page, and the reason for a piece of work is usually in the body.",
+    schema = buildJsonObject {
+        put("type", "object")
+        putJsonObject("properties") {
+            putJsonObject("node") {
+                put("type", "string")
+                put("description", "The node: its id, or its exact title.")
+            }
+        }
+        putJsonArray("required") { add("node") }
+        put("additionalProperties", false)
+    },
+) { arguments ->
+    val reference = arguments.requiredString("node")
+
+    runBlocking {
+        val nodes = vault.nodes()
+        val node = resolve(nodes, reference)
+        val graph = TaskGraph(nodes)
+        val byId = nodes.associateBy { it.id }
+
+        buildString {
+            append("# ${node.title}\n")
+            append("id: ${node.id.value}\n")
+            append("kind: ${node.kind.slug}\n")
+            node.task?.let { facet ->
+                append("status: ${facet.status.name.lowercase()}")
+                // Readiness is derived, so it is reported rather than stored — and it is the
+                // thing a caller most often wants to know next.
+                if (facet.status.isOpen && !node.archived) {
+                    append(if (graph.isBlocked(node.id)) " (blocked)" else " (ready)")
+                }
+                append("\n")
+                facet.due?.let { append("due: $it\n") }
+            }
+            node.assignee?.let { append("assignee: $it\n") }
+            if (node.archived) append("archived: yes\n")
+
+            val blockers = graph.blockers(node.id)
+            if (blockers.isNotEmpty()) {
+                append("waiting on: ")
+                append(blockers.joinToString(", ") { "\"${it.title}\" (${it.id.value})" })
+                append("\n")
+            }
+            val dependencies = node.dependsOn.mapNotNull { byId[it] }.filter { it !in blockers }
+            if (dependencies.isNotEmpty()) {
+                append("depends on (finished): ")
+                append(dependencies.joinToString(", ") { "\"${it.title}\"" })
+                append("\n")
+            }
+            val dependents = graph.dependents(node.id)
+            if (dependents.isNotEmpty()) {
+                append("blocking: ")
+                append(dependents.joinToString(", ") { "\"${it.title}\" (${it.id.value})" })
+                append("\n")
+            }
+            val related = node.relatesTo.mapNotNull { byId[it] }
+            if (related.isNotEmpty()) {
+                append("related: ")
+                append(related.joinToString(", ") { "\"${it.title}\"" })
+                append("\n")
+            }
+
+            val body = node.body.trim()
+            append("\n")
+            append(if (body.isEmpty()) "(no body)" else body)
+        }
+    }
+}
 
 private fun createTaskTool(vault: VaultAccess) = McpTool(
     name = "create_task",
