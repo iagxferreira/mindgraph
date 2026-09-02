@@ -28,7 +28,9 @@ it in a real app rather than by hand-editing what an agent left behind.
 
 Built with Kotlin and Compose Multiplatform for Desktop, in `desktop/`.
 
-![The notes graph in Mind mode](assets/screenshots/graph-mind.png)
+![The graph in Mind mode: 85 nodes, including memory imported from seven projects](assets/screenshots/graph-mind.png)
+
+<sub>Every project's agent memory in one graph — the notes on the right came from repositories that could never see each other.</sub>
 
 ## The idea
 
@@ -112,13 +114,16 @@ record of what you decided stays yours and stays legible.
 Both `[[wikilinks]]` in the prose and explicit edges count, so linking while writing costs
 two brackets.
 
+![An RFC assigned to an agent, blocked by the work it depends on](assets/screenshots/rfc-editor.png)
+
+<sub>An RFC node: the reasoning in the body, the agent it belongs to, what it is blocked by, and
+the edges to the work it governs — all of it reachable from one `get_node` call.</sub>
+
 ## What you get
 
 **One graph, two ways to read it.** Mind mode is force-directed, for associative
 thinking. Flow mode lays dependencies out in ranked columns, because springs scramble
 exactly the ordering a dependency graph exists to show.
-
-![The same graph in Flow mode](assets/screenshots/graph-flow.png)
 
 **Kinds you can see at a glance.** A node is a note, an RFC, or a reference — drawn as
 a circle, a diamond, or a square. Shape rather than colour, because colour already
@@ -136,13 +141,13 @@ much finishing it unblocks. There is no priority field: a declared rank would
 contradict the derived one, and it inflates until everything is urgent. A deadline
 decays on its own, because time moves.
 
-![Tasks grouped by derived state](assets/screenshots/tasks.png)
+![Ready and blocked work, with the reason each blocked task is waiting](assets/screenshots/tasks.png)
+
+<sub>Nothing here was typed in: ready, blocked, and what each one is waiting on are read off the graph.</sub>
 
 **Notes and tasks edited the same way.** Title, markdown body, live preview, and the
 task controls in the header — "Make this a task" is a button, not a different screen.
 Type `[[a note title]]` in the body and it becomes a link.
-
-![The markdown editor with task status](assets/screenshots/note-editor.png)
 
 **Your coding agent's memory, in the same graph.** Claude Code writes notes per project
 — markdown, frontmatter, `[[wikilinks]]`, one fact per file — and seals each set in its own
@@ -160,7 +165,9 @@ on the graph encodes cumulative tracked time, so the picture of your vault doubl
 picture of where your time went. The log records who spent it, so the Work screen can
 say how much of a body of work a machine did, and which agent did it.
 
-![Where the time went, split by worker](assets/screenshots/work.png)
+![Tracked time split by worker, broken down per agent and per node](assets/screenshots/work.png)
+
+<sub>A session where every minute was machine labour, split between two agents by name.</sub>
 
 ## Your data
 
