@@ -96,6 +96,9 @@ fun App() {
                             kind = kind,
                         )
 
+                        override suspend fun appendToBody(nodeId: NodeId, content: String): Node? =
+                            model.appendToBodyNow(nodeId, content)
+
                         override suspend fun nodes(): List<Node> = model.nodes
 
                         override suspend fun link(

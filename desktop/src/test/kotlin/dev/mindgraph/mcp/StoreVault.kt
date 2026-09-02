@@ -42,6 +42,16 @@ class StoreVault(
         assignee: String?,
     ): Node = store.create(title, body, task = null, kind = kind, assignee = assignee)
 
+    override suspend fun appendToBody(nodeId: NodeId, content: String): Node? {
+        val addition = content.trim()
+        if (addition.isEmpty()) return null
+        val node = store.load().find { it.id == nodeId } ?: return null
+        val existing = node.body.trimEnd()
+        return store.save(
+            node.copy(body = if (existing.isEmpty()) addition else "$existing\n\n$addition"),
+        )
+    }
+
     override suspend fun nodes(): List<Node> = store.load()
 
     override suspend fun setStatus(
