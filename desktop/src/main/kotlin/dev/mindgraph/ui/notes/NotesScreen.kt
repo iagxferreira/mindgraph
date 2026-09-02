@@ -147,6 +147,9 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             selected = kindFilter,
             counts = counts,
             onSelect = { kindFilter = it },
+            // This column is a fixed ListWidth, which is never enough to spell "References" —
+            // the label was clipped mid-word. The graph toolbar is wide, so it keeps its labels.
+            compact = true,
             modifier = Modifier.padding(start = 10.dp, end = 10.dp, bottom = 10.dp),
         )
         HorizontalDivider()
