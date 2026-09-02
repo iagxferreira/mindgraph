@@ -48,6 +48,7 @@ import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.AppViewModel
 import dev.mindgraph.state.GraphFilter
+import dev.mindgraph.state.Clustering
 import dev.mindgraph.state.LayoutMode
 import dev.mindgraph.ui.shell.KindFilterBar
 import dev.mindgraph.ui.theme.Accent
@@ -91,8 +92,15 @@ fun GraphScreen(
     )
     val kindCounts = viewModel.nodes.groupingBy { it.kind }.eachCount()
 
+    // Grouping is derived once and shared: the canvas captions and the layout positions must
+    // agree about what a group is, and they only do if they come from the same map.
+    val clusterGroups = remember(visible.nodes) { Clustering.groups(visible.nodes) }
+
     LaunchedEffect(mode, viewModel.nodes, viewModel.edges) {
         viewModel.layout.mode = mode
+        if (mode == LayoutMode.Cluster) {
+            viewModel.layout.setClusters(clusterGroups)
+        }
         if (mode == LayoutMode.Flow) {
             val ranks = graph.ranks()
             val terminalRank = (ranks.values.maxOrNull() ?: 0) + 1
@@ -118,6 +126,11 @@ fun GraphScreen(
             linkSourceId = linkSourceId,
             viewResetKey = viewResetKey,
             trackedSecondsFor = viewModel::trackedSecondsFor,
+            clusterLabels = if (mode == LayoutMode.Cluster) {
+                viewModel.layout.clusterCentres(clusterGroups)
+            } else {
+                emptyMap()
+            },
             onSelectNode = { viewModel.selectNode(it) },
             onLinkTarget = { targetId ->
                 val sourceId = linkSourceId
