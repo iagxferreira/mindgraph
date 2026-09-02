@@ -70,6 +70,12 @@ fun GraphCanvas(
      * node's card still names whatever you click, so nothing becomes unidentifiable.
      */
     showLabels: Boolean = true,
+    /**
+     * Nodes drawn as evidence rather than as work: finished tasks held in a Flow tree so it
+     * keeps its shape. Faded and shrunk, so they read as the past of the chain rather than as
+     * something waiting to be picked up.
+     */
+    ghostIds: Set<NodeId> = emptySet(),
     onSelectNode: (NodeId) -> Unit,
     onLinkTarget: (NodeId) -> Unit,
     modifier: Modifier = Modifier,
@@ -177,13 +183,25 @@ fun GraphCanvas(
             val emphasized = isSelected || isLinkSource
             val blocked = node.isTask && graph.isBlocked(node.id)
             val hue = nodeHue(node, blocked)
+            val isGhost = node.id in ghostIds && !emphasized
 
             drawNodeShape(
                 kind = node.kind,
                 center = screen,
-                radius = radius,
-                fill = hue.copy(alpha = if (emphasized) 0.42f else 0.16f),
-                stroke = if (emphasized) hue else hue.copy(alpha = 0.7f),
+                // Smaller as well as fainter. Tracked time sets the radius, and finished work
+                // has the most of it, so fading alone would leave the biggest circles on the
+                // canvas belonging to the nodes that matter least.
+                radius = if (isGhost) radius * GHOST_SCALE else radius,
+                fill = when {
+                    isGhost -> hue.copy(alpha = 0.06f)
+                    emphasized -> hue.copy(alpha = 0.42f)
+                    else -> hue.copy(alpha = 0.16f)
+                },
+                stroke = when {
+                    isGhost -> hue.copy(alpha = 0.28f)
+                    emphasized -> hue
+                    else -> hue.copy(alpha = 0.7f)
+                },
                 strokeStyle = Stroke(
                     width = if (emphasized) 3f else 1.6f,
                     pathEffect = when {
@@ -204,7 +222,10 @@ fun GraphCanvas(
                 }
                 val label = textMeasurer.measure(
                     text = labelText,
-                    style = TextStyle(color = TextPrimary, fontSize = 12.sp),
+                    style = TextStyle(
+                        color = if (isGhost) TextMuted.copy(alpha = 0.5f) else TextPrimary,
+                        fontSize = 12.sp,
+                    ),
                 )
                 if (layout.mode != dev.mindgraph.state.LayoutMode.Flow || zoom >= 0.7f || emphasized) {
                     drawText(
@@ -264,6 +285,9 @@ private fun nodeHue(node: Node, blocked: Boolean): Color = when {
     node.task?.status == TaskStatus.Done -> Done
     else -> Accent
 }
+
+/** How much of its normal size a ghost keeps. Small enough to recede, large enough to trace. */
+private const val GHOST_SCALE = 0.6f
 
 private fun nodeRadius(trackedSeconds: Long): Float {
     val minutes = trackedSeconds / 60f
