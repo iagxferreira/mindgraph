@@ -98,12 +98,14 @@ class AppViewModel(
         asTask: Boolean = false,
         due: String? = null,
         assignee: String? = null,
+        kind: NodeKind = NodeKind.Note,
     ): Node {
         val facet = if (asTask) TaskFacet(status = TaskStatus.Todo, due = due) else null
         val created = store.create(
             title.trim().ifBlank { "Untitled" },
             body,
             facet,
+            kind = kind,
             assignee = assignee?.trim()?.takeIf { it.isNotEmpty() },
         )
         refresh()
