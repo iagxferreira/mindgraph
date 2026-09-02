@@ -191,4 +191,22 @@ class McpWorkflowTest {
         assertFalse(result.isError(), result.text())
         assertEquals(TaskStatus.Doing, runBlocking { store.load() }.single().task?.status)
     }
+
+    @Test
+    fun archivedWorkIsNotCountedAmongTheBlocked() {
+        newVault()
+        val blocker = task("Unfinished blocker")
+        val shelved = task("Put away while blocked")
+        link(shelved.id.value, blocker.id.value)
+        runBlocking {
+            store.save(store.load().first { it.id == shelved.id }.copy(archived = true))
+        }
+
+        val text = readyTasks().text()
+
+        // It is neither ready nor blocked: it is put away, and saying "1 blocked" would send
+        // someone looking for work that nobody is waiting on.
+        assertFalse("blocked" in text, text)
+        assertTrue("Unfinished blocker" in text, text)
+    }
 }

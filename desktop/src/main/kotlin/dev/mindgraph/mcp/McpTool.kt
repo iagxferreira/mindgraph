@@ -193,7 +193,7 @@ private fun listReadyTasksTool(vault: VaultAccess) = McpTool(
         val graph = TaskGraph(nodes)
         val today = LocalDate.now()
         val ready = graph.rankedReadyTasks(today)
-        val blocked = nodes.count { it.task?.status?.isOpen == true && graph.isBlocked(it.id) }
+        val blocked = nodes.count { it.isLiveWork && graph.isBlocked(it.id) }
 
         if (ready.isEmpty()) {
             if (blocked == 0) {
