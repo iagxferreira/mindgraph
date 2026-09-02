@@ -30,6 +30,9 @@ and what it unblocks. This file is the readable summary, not the source of truth
 - Nodes can be **archived** — kept with their id, links and tracked time, out of the
   graph and out of ready work — and **assigned** to a person or an agent, which filters
   what you are shown without ever gating what is ready.
+- **Cluster mode** groups the graph by the repository a node came from. Worth revisiting
+  once more projects are imported: today one group holds the vault's own notes and the rest
+  hold two to four each, which is the same lopsidedness that ruled out clustering by kind.
 - **Imported wikilinks resolve into edges.** A node answers to its title, its slug, and
   any alias — which is how a note linked as `[[its-memory-name]]` is found when its title
   is a whole sentence.
@@ -60,9 +63,6 @@ unblocks.
 
 ## Later
 
-- Clustering the graph by origin project, once imported notes from many repositories
-  make that a balanced grouping. Clustering by kind was considered and rejected: it
-  fights the force-directed layout and the kinds are lopsided.
 - A review lane for agent-created nodes, if unattended creation turns out to fill the
   vault with noise. Worth deciding from a week of real use rather than in advance.
 - Whether MindGraph subsumes Claude's per-project memory entirely. Two memory systems

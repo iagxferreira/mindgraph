@@ -6,6 +6,10 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **A Cluster layout mode**, grouping the graph by the repository each node was imported
+  from, with every group named on the canvas. Nodes written in the vault itself group as
+  "This vault", which is the split that matters once other projects' notes are in.
+
 - **Claude's plan documents import as RFC nodes.** `~/.claude/plans/*.md` are design
   documents already — context, decision, rationale — and land as `kind: rfc`, linked to
   what the vault knows about the project their title names. A project mentioned only in the
