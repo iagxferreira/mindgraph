@@ -6,6 +6,13 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **`create_note` and `append_node_body` over MCP.** Agents can record what is not work —
+  a note, RFC or reference with no status, so it never lands in ready work as a task
+  nobody will do — and keep a running record on the node they are working. Appending only
+  ever adds; it cannot alter a node's fields or a word already in its body.
+- Node creation can set the kind, so an RFC or reference can be created as one rather than
+  relabelled after the fact.
+
 - A hide-done control on the all-nodes list and both graph modes, so completed task
   nodes can be removed from working views without changing the vault.
 

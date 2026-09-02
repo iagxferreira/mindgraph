@@ -65,13 +65,23 @@ user named the work, still check whether a node for it already exists.
 what. Then `link_nodes` with `depends_on` for anything it genuinely cannot start
 without. An unlinked node is a dot; the edges are the product.
 
-Agents are append-only: create a new note or task when context changes. Do not rewrite
-an existing node's title, body, kind, deadline, or assignee. Those edits are human-only
-through the app; `update_status` is the deliberate exception for the task being worked.
+Not everything worth recording is work. `create_note` puts a finding, a decision or a
+piece of reference in the graph as a note, RFC or reference — with no status, so it never
+turns up in `list_ready_tasks` as work nobody will ever pick up. Reach for it instead of
+minting a task you do not intend anyone to do.
+
+Agents are append-only: do not rewrite an existing node's title, body, kind, deadline, or
+assignee. Those edits are human-only through the app. There are two deliberate exceptions:
+`update_status` for the task being worked, and `append_node_body`, which adds to the end
+of a node and can never alter or remove what is already there.
 
 **3. Start the clock.** `update_status` to `doing`, with `agent` set to your own name.
 This is what logs the work as machine labour — time between `doing` and closing is
 attributed to the agent, and nothing else records it.
+
+**3b. Keep the record on the work.** As you learn something the next session would have
+to rediscover, `append_node_body` it onto the node you are working. A decision made and
+its reason, an approach that failed and why — on the node, while it is fresh.
 
 **4. Build.** Follow the repo's own conventions: one layer per commit, Conventional
 Commits, tests beside the layer they cover.

@@ -52,11 +52,17 @@ running JVM is still lazily loading from it, and the next MCP call fails with
 The server runs inside the app, on `127.0.0.1:4319` (`MINDGRAPH_MCP_PORT` to move it),
 for as long as the window is open. `ConnectionRefused` means the app is closed.
 
-Agents work append-only. They may create a new task or note, read nodes, link nodes, and
-change task status for tracked work. They must not rewrite an existing node's title,
-body, kind, deadline, or assignee; those edits belong to a human in the app. When new
-context changes the picture, create another note and link it rather than editing the
-original.
+Agents work append-only. They may create a task or a note, read nodes, link nodes, add to
+the end of a node's body, and change task status for tracked work. They must not *rewrite*
+an existing node's title, body, kind, deadline, or assignee; those edits belong to a human
+in the app.
+
+`append_node_body` is the deliberate narrowing of that rule, not a hole in it: adding to
+the end cannot replace or delete what a human wrote, which is exactly why saving a whole
+body stays human-only. Use it for a running record of the work in hand — what was tried,
+what was found, what the next session needs. When new context genuinely changes the
+picture, that is a different thing: `create_note` and link it rather than burying it at
+the bottom of an unrelated node.
 
 ```bash
 claude mcp add --transport http mindgraph http://127.0.0.1:4319/mcp
