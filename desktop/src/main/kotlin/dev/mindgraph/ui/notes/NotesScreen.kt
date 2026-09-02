@@ -139,7 +139,7 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             // The count that stood here said exactly what the All pill below it says — counts
             // is grouped from the same filtered list — and it was spending width to do it.
             TextButton(onClick = { viewModel.createNode() }) { Text("New", color = Accent) }
-            ImportMemoryButton(onImport = { viewModel.importClaudeMemory() })
+            ImportMemoryButton(onImport = { viewModel.importClaudeContext() })
             DoneFilterToggle(hideDone = hideDone, onToggle = { hideDone = !hideDone })
             ArchiveFilterMenu(showArchived = showArchived, onChange = { showArchived = it })
         }
@@ -230,13 +230,14 @@ private fun SectionHeader(kind: NodeKind, count: Int) {
 }
 
 /**
- * Pulls in Claude Code's memory notes. Safe to press twice: files already imported are skipped,
- * which matters because Claude keeps writing new ones and this is how they arrive.
+ * Pulls in Claude Code's memory notes and plan documents. Safe to press twice: files already
+ * imported are skipped, which matters because Claude keeps writing new ones and this is how
+ * they arrive.
  */
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun ImportMemoryButton(onImport: () -> Unit) {
-    val description = "Import Claude memory notes"
+    val description = "Import notes and plans from Claude"
     TooltipBox(
         positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
         tooltip = { PlainTooltip { Text(description) } },
