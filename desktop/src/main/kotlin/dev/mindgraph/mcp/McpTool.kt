@@ -115,6 +115,9 @@ private fun getNodeTool(vault: VaultAccess) = McpTool(
                 facet.due?.let { append("due: $it\n") }
             }
             node.assignee?.let { append("assignee: $it\n") }
+            // The names its siblings link it by. An imported note's title is a whole sentence,
+            // so the alias is often the only name that appears in anyone else's prose.
+            if (node.aliases.isNotEmpty()) append("also known as: ${node.aliases.joinToString(", ")}\n")
             if (node.archived) append("archived: yes\n")
 
             val blockers = graph.blockers(node.id)
