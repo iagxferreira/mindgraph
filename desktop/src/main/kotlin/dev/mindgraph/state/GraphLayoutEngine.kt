@@ -100,6 +100,19 @@ class GraphLayoutEngine {
         this.edges = edges
     }
 
+    /**
+     * Positions computed elsewhere for a mode that places rather than simulates.
+     *
+     * Flow works out a whole forest of trees at once — depth, centring and the packing of one
+     * tree against the next are a single decision, not something the engine can derive from a
+     * rank per node — so it hands the finished positions over and the engine only eases toward
+     * them.
+     */
+    fun setTargets(positions: Map<String, Vec2>) {
+        targets.clear()
+        targets.putAll(positions)
+    }
+
     /** Places prerequisites above their dependents, centering each prerequisite over its branch. */
     fun setFlowRanks(ranks: Map<String, Int>) {
         targets.clear()
