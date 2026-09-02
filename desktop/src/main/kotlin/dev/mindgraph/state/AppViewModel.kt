@@ -272,6 +272,19 @@ class AppViewModel(
         return logged + live
     }
 
+    /**
+     * The stretch currently on the clock, as a session that has not been written yet — so a
+     * running timer shows up in totals without the log having to be touched every second.
+     */
+    val liveSession: WorkSession?
+        get() {
+            val nodeId = runningNodeId ?: return null
+            val since = runningSinceUnix ?: return null
+            val elapsed = (liveNowUnix - since).coerceAtLeast(0)
+            if (elapsed <= 0) return null
+            return WorkSession(nodeId, since, liveNowUnix, elapsed, runningWorker, runningAgent)
+        }
+
     /** Tracked seconds on a node by one worker, including the stretch running right now. */
     fun trackedSecondsFor(nodeId: NodeId, worker: Worker): Long {
         val logged = sessions.filter { it.nodeId == nodeId && it.worker == worker }.sumOf { it.seconds }
