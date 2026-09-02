@@ -35,7 +35,7 @@ class McpTool(
  * without standing up Compose.
  */
 interface VaultAccess {
-    suspend fun createTask(title: String, body: String, due: String?): Node
+    suspend fun createTask(title: String, body: String, due: String?, assignee: String?): Node
     suspend fun nodes(): List<Node>
 
     /** Total tracked seconds on a node, both yours and every agent's. */
@@ -46,6 +46,7 @@ interface VaultAccess {
         status: TaskStatus,
         due: String?,
         agent: String?,
+        assignee: String?,
     ): Node?
 }
 
@@ -77,6 +78,10 @@ private fun createTaskTool(vault: VaultAccess) = McpTool(
                 put("type", "string")
                 put("description", "Optional deadline as a date, e.g. 2026-09-04. Ready work is ordered by it.")
             }
+            putJsonObject("assignee") {
+                put("type", "string")
+                put("description", ASSIGNEE_HINT)
+            }
         }
         putJsonArray("required") { add("title") }
         put("additionalProperties", false)
@@ -85,11 +90,13 @@ private fun createTaskTool(vault: VaultAccess) = McpTool(
     val title = arguments.requiredString("title")
     val body = arguments["body"]?.jsonPrimitive?.contentOrNull.orEmpty()
     val due = arguments.optionalDueDate()
+    val assignee = arguments.optionalName("assignee")
 
-    val node = runBlocking { vault.createTask(title, body, due) }
+    val node = runBlocking { vault.createTask(title, body, due, assignee) }
     buildString {
         append("Created task \"${node.title}\" with id ${node.id.value}.")
         due?.let { append(" Due $it.") }
+        assignee?.let { append(" Assigned to $it.") }
     }
 }
 
@@ -180,6 +187,12 @@ private fun listReadyTasksTool(vault: VaultAccess) = McpTool(
                 put("type", "integer")
                 put("description", "How many to return. Defaults to 10.")
             }
+            putJsonObject("assignee") {
+                put("type", "string")
+                put("description",
+                    "Only tasks assigned to this name. Pass your own to ask what is yours; " +
+                        "omit to see everything that is ready, assigned or not.")
+            }
         }
         putJsonArray("required") {}
         put("additionalProperties", false)
@@ -187,16 +200,22 @@ private fun listReadyTasksTool(vault: VaultAccess) = McpTool(
 ) { arguments ->
     val limit = arguments["limit"]?.jsonPrimitive?.contentOrNull?.toIntOrNull()?.coerceIn(1, 100)
         ?: DEFAULT_LIMIT
+    val assignee = arguments.optionalName("assignee")
 
     runBlocking {
         val nodes = vault.nodes()
         val graph = TaskGraph(nodes)
         val today = LocalDate.now()
+        // Assignment filters, it never gates: work owned by someone else is still ready,
+        // it is just not yours.
         val ready = graph.rankedReadyTasks(today)
+            .filter { assignee == null || it.assignee.equals(assignee, ignoreCase = true) }
         val blocked = nodes.count { it.isLiveWork && graph.isBlocked(it.id) }
 
         if (ready.isEmpty()) {
-            if (blocked == 0) {
+            if (assignee != null) {
+                "Nothing ready is assigned to $assignee."
+            } else if (blocked == 0) {
                 "No open tasks."
             } else {
                 "Nothing is ready: all $blocked open tasks are blocked by unfinished dependencies."
@@ -204,10 +223,12 @@ private fun listReadyTasksTool(vault: VaultAccess) = McpTool(
         } else {
             buildString {
                 append("${ready.size} task(s) ready")
+                assignee?.let { append(" for $it") }
                 if (blocked > 0) append(", $blocked blocked")
                 append(":\n")
                 ready.take(limit).forEach { node ->
                     append("- ${node.title} (${node.id.value})")
+                    if (assignee == null) node.assignee?.let { append(" — @$it") }
                     node.task?.dueDate?.let { due ->
                         append(if (due.isBefore(today)) " — OVERDUE, was due $due" else " — due $due")
                     }
@@ -250,6 +271,10 @@ private fun updateStatusTool(vault: VaultAccess) = McpTool(
                         "is logged against this name, so the vault can tell your work from the " +
                         "user's.")
             }
+            putJsonObject("assignee") {
+                put("type", "string")
+                put("description", ASSIGNEE_HINT + " Omit to leave it as it is.")
+            }
         }
         putJsonArray("required") { add("node"); add("status") }
         put("additionalProperties", false)
@@ -258,8 +283,8 @@ private fun updateStatusTool(vault: VaultAccess) = McpTool(
     val reference = arguments.requiredString("node")
     val raw = arguments.requiredString("status")
     val due = arguments.optionalDueDate()
-    val agent = arguments["agent"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
-        ?.take(MAX_AGENT_NAME)
+    val agent = arguments.optionalName("agent")
+    val assignee = arguments.optionalName("assignee")
     val status = TaskStatus.parse(raw)
         ?: throw IllegalArgumentException(
             "status must be one of ${STATUSES.joinToString(", ")}, not \"$raw\".",
@@ -270,7 +295,7 @@ private fun updateStatusTool(vault: VaultAccess) = McpTool(
         val node = resolve(before, reference)
         val readyBefore = TaskGraph(before).readyTasks().map { it.id }.toSet()
 
-        val saved = vault.setStatus(node.id, status, due, agent)
+        val saved = vault.setStatus(node.id, status, due, agent, assignee)
             ?: throw IllegalStateException("Refused: \"${node.title}\" no longer exists.")
 
         // What the change freed up. This is the whole reason the edges are worth storing, so
@@ -282,6 +307,7 @@ private fun updateStatusTool(vault: VaultAccess) = McpTool(
         buildString {
             append("\"${saved.title}\" is now ${status.name.lowercase()}.")
             due?.let { append(" Due $it.") }
+            assignee?.let { append(" Assigned to $it.") }
             when (status) {
                 TaskStatus.Doing -> append(" The clock is running against ${agent ?: "you"}.")
                 else -> vault.trackedSeconds(saved.id).takeIf { it > 0 }?.let {
@@ -300,7 +326,10 @@ private fun updateStatusTool(vault: VaultAccess) = McpTool(
 private const val DEPENDS_ON = "depends_on"
 private const val RELATES_TO = "relates_to"
 private const val DEFAULT_LIMIT = 10
-private const val MAX_AGENT_NAME = 64
+private const val MAX_NAME = 64
+private const val ASSIGNEE_HINT =
+    "Who should pick this up - a person or an agent name. This is who it belongs to, not who " +
+        "is working it right now."
 
 private fun formatDuration(seconds: Long): String {
     val hours = seconds / 3600
@@ -318,6 +347,10 @@ private val STATUSES = TaskStatus.entries.map { it.name.lowercase() }
  * silently do nothing at all, and a model that guessed the format wrong should be told so at
  * the point it guessed — not leave a task that quietly never becomes urgent.
  */
+/** A person's or an agent's name, as they choose to write it. Trimmed, capped, never empty. */
+private fun JsonObject.optionalName(key: String): String? =
+    this[key]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }?.take(MAX_NAME)
+
 private fun JsonObject.optionalDueDate(): String? {
     val raw = this["due"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
         ?: return null
