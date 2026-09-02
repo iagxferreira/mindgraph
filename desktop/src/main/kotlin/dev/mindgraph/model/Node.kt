@@ -48,12 +48,44 @@ data class Node(
     val archived: Boolean = false,
     val dependsOn: List<NodeId> = emptyList(),
     val relatesTo: List<NodeId> = emptyList(),
+    /**
+     * Nodes this one is context for — the briefing you would hand an agent starting on them.
+     *
+     * Deliberately not [relatesTo]: "these two ideas are related" is not "load this before
+     * working on that". Reusing association would put every incidental link into the bundle,
+     * which is exactly what makes a context window fill with things nobody chose.
+     *
+     * Held on the node that *is* the context rather than on the thing it serves, like every
+     * other edge here, so a note copied out of the vault still says what it was for — and so
+     * one note can brief several projects without being duplicated.
+     */
+    val contextFor: List<NodeId> = emptyList(),
     val createdAt: String,
     val updatedAt: String,
     /** Where this node's markdown lives. Derived from the title; never an identity. */
     val slug: String,
 ) {
     val isTask: Boolean get() = task != null
+
+    /** The nodes this one points at with [kind]. */
+    fun links(kind: EdgeKind): List<NodeId> = when (kind) {
+        EdgeKind.DependsOn -> dependsOn
+        EdgeKind.RelatesTo -> relatesTo
+        EdgeKind.ContextFor -> contextFor
+    }
+
+    /**
+     * This node with one more edge of [kind].
+     *
+     * Which field a kind lives in is the model's business, not the linking rules'. Keeping the
+     * mapping here means adding a fourth kind is one branch in one place rather than a hunt
+     * through every caller that happened to know the shape.
+     */
+    fun withLink(kind: EdgeKind, targetId: NodeId): Node = when (kind) {
+        EdgeKind.DependsOn -> copy(dependsOn = dependsOn + targetId)
+        EdgeKind.RelatesTo -> copy(relatesTo = relatesTo + targetId)
+        EdgeKind.ContextFor -> copy(contextFor = contextFor + targetId)
+    }
 
     /**
      * Work that is still live: open, and not put away. Archived work stops blocking whatever
@@ -118,7 +150,7 @@ enum class TaskStatus {
     }
 }
 
-enum class EdgeKind { RelatesTo, DependsOn }
+enum class EdgeKind { RelatesTo, DependsOn, ContextFor }
 
 /**
  * Edges are not stored. They are projected from the frontmatter of each node so that a file

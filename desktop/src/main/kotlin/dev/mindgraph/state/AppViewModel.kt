@@ -472,6 +472,11 @@ class AppViewModel(
         scope.launch { linkNow(sourceId, targetId, EdgeKind.RelatesTo) }
     }
 
+    /** Adds an edge of any kind, so a caller does not have to know the full set to offer one. */
+    fun link(sourceId: NodeId, targetId: NodeId, kind: EdgeKind) {
+        scope.launch { linkNow(sourceId, targetId, kind) }
+    }
+
     /** Refuses edges that would close a dependency cycle, and says so rather than failing quietly. */
     fun linkDependsOn(sourceId: NodeId, targetId: NodeId) {
         scope.launch { linkNow(sourceId, targetId, EdgeKind.DependsOn) }

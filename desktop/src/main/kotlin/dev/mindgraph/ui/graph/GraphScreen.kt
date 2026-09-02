@@ -272,10 +272,7 @@ fun GraphScreen(
             wouldCycle = graph.wouldCycle(sourceId, targetId),
             onDismiss = { pendingTarget = null },
             onPick = { kind ->
-                when (kind) {
-                    EdgeKind.RelatesTo -> viewModel.linkRelates(sourceId, targetId)
-                    EdgeKind.DependsOn -> viewModel.linkDependsOn(sourceId, targetId)
-                }
+                viewModel.link(sourceId, targetId, kind)
                 pendingTarget = null
             },
         )

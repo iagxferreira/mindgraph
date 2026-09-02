@@ -24,14 +24,11 @@ object Linking {
         val source = nodes.find { it.id == sourceId } ?: return LinkOutcome.UnknownNode
         if (nodes.none { it.id == targetId }) return LinkOutcome.UnknownNode
 
-        val existing = when (kind) {
-            EdgeKind.DependsOn -> source.dependsOn
-            EdgeKind.RelatesTo -> source.relatesTo
-        }
-        if (targetId in existing) return LinkOutcome.AlreadyLinked
+        if (targetId in source.links(kind)) return LinkOutcome.AlreadyLinked
 
-        // Only dependencies can cycle meaningfully — a mutual `relates_to` is just two notes
-        // pointing at each other, which is fine and often correct.
+        // Only dependencies can cycle meaningfully. A mutual `relates_to` is just two notes
+        // pointing at each other, and two projects that are context for each other is a real
+        // thing to want — neither orders any work, so neither can deadlock it.
         if (kind == EdgeKind.DependsOn && TaskGraph(nodes).wouldCycle(sourceId, targetId)) {
             return LinkOutcome.WouldCycle
         }
@@ -39,8 +36,5 @@ object Linking {
     }
 
     /** The node as it should be saved, once [evaluate] has returned [LinkOutcome.Linked]. */
-    fun applied(source: Node, targetId: NodeId, kind: EdgeKind): Node = when (kind) {
-        EdgeKind.DependsOn -> source.copy(dependsOn = source.dependsOn + targetId)
-        EdgeKind.RelatesTo -> source.copy(relatesTo = source.relatesTo + targetId)
-    }
+    fun applied(source: Node, targetId: NodeId, kind: EdgeKind): Node = source.withLink(kind, targetId)
 }
