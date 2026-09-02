@@ -155,6 +155,12 @@ class FlowForestTest {
     }
 
     @Test
+    fun archivedChainMembersComeBackWhenArchivedWorkIsShown() {
+        val nodes = listOf(task("a"), task("b", dependsOn = listOf("a"), archived = true))
+        assertEquals(setOf("a", "b"), ids(FlowForest.build(nodes, includeArchived = true)))
+    }
+
+    @Test
     fun aDependencyOnANonTaskDoesNotDragTheNoteIn() {
         val layout = FlowForest.build(listOf(note("spec"), task("work", dependsOn = listOf("spec"))))
         assertTrue(layout.isEmpty)
