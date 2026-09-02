@@ -2,6 +2,7 @@ package dev.mindgraph.mcp
 
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.storage.NodeStore
+import dev.mindgraph.storage.SessionLog
 import dev.mindgraph.storage.Vault
 import java.nio.file.Files
 import kotlinx.coroutines.runBlocking
@@ -21,8 +22,9 @@ import kotlin.test.assertTrue
 class McpDispatcherTest {
 
     private fun newFixture(): Pair<McpDispatcher, NodeStore> {
-        val store = NodeStore(Vault(Files.createTempDirectory("mindgraph-mcp")))
-        return McpDispatcher(mindGraphTools(StoreVault(store))) to store
+        val vault = Vault(Files.createTempDirectory("mindgraph-mcp"))
+        val store = NodeStore(vault)
+        return McpDispatcher(mindGraphTools(StoreVault(store, SessionLog(vault)))) to store
     }
 
     private fun request(id: Int, method: String, params: JsonObject? = null): JsonObject =
