@@ -54,6 +54,36 @@ class GraphLayoutEngine {
         pinned.clear()
     }
 
+    /**
+     * Throws every unpinned node back to a fresh seed position so the next run of the layout
+     * builds the picture for the nodes that are actually on screen.
+     *
+     * Filtering changes how many nodes there are, and a layout is a statement about a count:
+     * ring sizes, rank rows and the spread of the force sim are all derived from it. Leaving
+     * survivors where they were keeps holes where the hidden nodes used to sit and settles out
+     * of the old shape rather than into the new one.
+     *
+     * Pinned nodes are left exactly where they are. A pin is a position a person chose by
+     * dragging, and hiding some other node is not a reason to throw that away.
+     *
+     * Seeding here rather than leaving it to [sync] keeps the two independent of each other:
+     * whichever runs first, every node still ends up with a position, so nothing can be
+     * dropped from the canvas for a frame.
+     */
+    fun reflow() {
+        for (id in nodeIds) {
+            if (id in pinned) continue
+            positions[id] = seedPosition()
+            velocities[id] = Vec2(0f, 0f)
+        }
+    }
+
+    private fun seedPosition(): Vec2 {
+        val angle = random.nextDouble(0.0, 2 * Math.PI)
+        val radius = 80.0 + random.nextDouble(0.0, 140.0)
+        return Vec2((cos(angle) * radius).toFloat(), (sin(angle) * radius).toFloat())
+    }
+
     fun sync(ids: List<String>, edges: List<Edge>) {
         val idSet = ids.toSet()
         positions.keys.retainAll(idSet)
@@ -62,9 +92,7 @@ class GraphLayoutEngine {
         targets.keys.retainAll(idSet)
         for (id in ids) {
             if (id !in positions) {
-                val angle = random.nextDouble(0.0, 2 * Math.PI)
-                val radius = 80.0 + random.nextDouble(0.0, 140.0)
-                positions[id] = Vec2((cos(angle) * radius).toFloat(), (sin(angle) * radius).toFloat())
+                positions[id] = seedPosition()
                 velocities[id] = Vec2(0f, 0f)
             }
         }
