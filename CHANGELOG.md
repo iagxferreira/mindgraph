@@ -6,6 +6,12 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **`search_notes` over MCP.** Agents can now scan the current vault by title, alias, or
+  body text and receive each match's id, title, kind, and bounded context snippet. It is
+  deliberately a straight scan rather than a cache, so external vault edits are visible on
+  the next call.
+
+
 - **Codex repository instructions import.** The node list can now import nested
   `AGENTS.md` files from `CODEX_WORKSPACE_ROOT` (defaulting to `~/workspace`) as
   read-only, re-runnable context notes with their source path preserved.
