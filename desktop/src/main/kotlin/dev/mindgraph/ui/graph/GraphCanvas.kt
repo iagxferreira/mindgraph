@@ -169,14 +169,21 @@ fun GraphCanvas(
                 ),
             )
 
+            val labelText = if (layout.mode == dev.mindgraph.state.LayoutMode.Flow) {
+                node.title.take(24).let { if (node.title.length > 24) "$it..." else it }
+            } else {
+                node.title
+            }
             val label = textMeasurer.measure(
-                text = node.title,
+                text = labelText,
                 style = TextStyle(color = TextPrimary, fontSize = 12.sp),
             )
-            drawText(
-                textLayoutResult = label,
-                topLeft = Offset(screen.x - label.size.width / 2f, screen.y + radius + 4f),
-            )
+            if (layout.mode != dev.mindgraph.state.LayoutMode.Flow || zoom >= 0.7f || emphasized) {
+                drawText(
+                    textLayoutResult = label,
+                    topLeft = Offset(screen.x - label.size.width / 2f, screen.y + radius + 4f),
+                )
+            }
         }
     }
 }
