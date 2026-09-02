@@ -65,6 +65,10 @@ user named the work, still check whether a node for it already exists.
 what. Then `link_nodes` with `depends_on` for anything it genuinely cannot start
 without. An unlinked node is a dot; the edges are the product.
 
+Agents are append-only: create a new note or task when context changes. Do not rewrite
+an existing node's title, body, kind, deadline, or assignee. Those edits are human-only
+through the app; `update_status` is the deliberate exception for the task being worked.
+
 **3. Start the clock.** `update_status` to `doing`, with `agent` set to your own name.
 This is what logs the work as machine labour — time between `doing` and closing is
 attributed to the agent, and nothing else records it.

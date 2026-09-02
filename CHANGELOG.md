@@ -8,7 +8,8 @@ All notable changes to MindGraph will be tracked in this file.
 
 - **An MCP server hosted by the running app**, on loopback for as long as the window is
   open, so coding agents work the graph directly: `list_ready_tasks`, `create_task`,
-  `link_nodes`, and `update_status`.
+  `link_nodes`, and `update_status`. Agents create new context nodes rather than
+  rewriting existing notes; human edits remain in the app.
 - **Node kinds** — note, RFC, or reference — drawn on the canvas as shape, with a filter
   that narrows the graph and sections that group the node list.
 - **Deadlines.** `due` is read from frontmatter and ranks ready work: overdue first, then

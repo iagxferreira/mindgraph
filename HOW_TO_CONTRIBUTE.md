@@ -38,6 +38,11 @@ Before doing repository work, agents should call `list_ready_tasks`, create or f
 the task node, mark it `doing` with `update_status` and their agent name, then close
 it with `done` or `dropped` when finished.
 
+Agent changes are append-only. Create a new note or task when new context is needed and
+link it to the existing node. Do not rewrite an existing node's title, body, kind,
+deadline, or assignee; those edits are human-only in the app. Agents may still update
+the status of the task they are working.
+
 ## Data Location
 
 MindGraph stores its markdown vault in `~/.config/mindgraph/vault/` by default.
