@@ -15,6 +15,7 @@ import dev.mindgraph.model.Worker
 import dev.mindgraph.model.currentUnixTimestamp
 import dev.mindgraph.storage.MemoryImport
 import dev.mindgraph.storage.NodeStore
+import dev.mindgraph.storage.PlanImport
 import dev.mindgraph.storage.SessionLog
 import dev.mindgraph.storage.VaultWatcher
 import dev.mindgraph.storage.WikiLinks
@@ -214,6 +215,76 @@ class AppViewModel(
         val result = MemoryImportResult(imported, skipped, unreadable, files.size)
         statusMessage = result.summary()
         return result
+    }
+
+    /**
+     * Copies Claude Code's plan documents in as RFC nodes, skipping any file already imported.
+     * Read-only upstream, like the memory import.
+     *
+     * A plan whose title names exactly one project the vault already knows is linked to that
+     * project's notes; the rest land unlinked rather than guessed at. See [PlanImport.subjectOf].
+     */
+    suspend fun importClaudePlansNow(plansRoot: Path = defaultClaudePlansRoot()): PlanImportResult {
+        val files = PlanImport.scan(plansRoot)
+        val alreadyImported = store.frontmatterValues(PlanImport.KEY_ORIGIN)
+        // Only projects already in the vault can be linked to, which is why the memory import
+        // runs first: it is what makes a project known at all.
+        val knownProjects = store.frontmatterValues(MemoryImport.KEY_ORIGIN_PROJECT)
+
+        var imported = 0
+        var skipped = 0
+        val toLink = mutableListOf<Pair<Node, String>>()
+        for (file in files) {
+            if (file.toAbsolutePath().toString() in alreadyImported) {
+                skipped++
+                continue
+            }
+            val plan = PlanImport.read(file, knownProjects) ?: continue
+            val created = store.create(
+                title = plan.title,
+                body = plan.body,
+                task = null,
+                kind = NodeKind.Rfc,
+                extras = PlanImport.extrasFor(plan),
+            )
+            imported++
+            plan.subject?.let { toLink += created to it }
+        }
+
+        // Linking is a second pass because linkNow evaluates against the in-memory snapshot,
+        // and a node created a moment ago is not in it yet — one reload, then every edge.
+        refresh()
+        var linked = 0
+        for ((plan, subject) in toLink) {
+            if (linkToProject(plan, subject)) linked++
+        }
+
+        refresh()
+        val result = PlanImportResult(imported, skipped, linked, files.size)
+        statusMessage = result.summary()
+        return result
+    }
+
+    /**
+     * Links a plan to what the vault already holds about its project. Relates-to rather than
+     * depends-on: a design document and the notes about its project inform each other, and
+     * neither blocks the other.
+     */
+    private suspend fun linkToProject(plan: Node, originProject: String): Boolean {
+        val about = store.nodesWith(MemoryImport.KEY_ORIGIN_PROJECT, originProject)
+            .filter { it.id != plan.id }
+        if (about.isEmpty()) return false
+        about.forEach { target -> linkNow(plan.id, target.id, EdgeKind.RelatesTo) }
+        return true
+    }
+
+    /** Runs both imports, memory first — plans can only link to projects memory has introduced. */
+    fun importClaudeContext() {
+        scope.launch {
+            val memory = importClaudeMemoryNow()
+            val plans = importClaudePlansNow()
+            statusMessage = listOf(memory.summary(), plans.summary()).joinToString(" · ")
+        }
     }
 
     fun importClaudeMemory() {
@@ -534,3 +605,24 @@ data class MemoryImportResult(
 /** `~/.claude/projects`, where Claude Code keeps a memory directory per project. */
 fun defaultClaudeProjectsRoot(): Path =
     Paths.get(System.getProperty("user.home") ?: ".", ".claude", "projects")
+
+/** What one run of the plan import did. */
+data class PlanImportResult(
+    val imported: Int,
+    val skipped: Int,
+    val linked: Int,
+    val filesFound: Int,
+) {
+    fun summary(): String = when {
+        filesFound == 0 -> "No Claude plans found"
+        imported == 0 && skipped > 0 -> "Plans already imported ($skipped)"
+        imported == 0 -> "No plans to import"
+        // Saying how many linked matters: a plan whose title names no known project lands
+        // unlinked on purpose, and that should be visible rather than look like a failure.
+        else -> "Imported $imported plan(s) as RFCs, $linked linked to a project"
+    }
+}
+
+/** `~/.claude/plans`, where Claude Code keeps its design documents. */
+fun defaultClaudePlansRoot(): Path =
+    Paths.get(System.getProperty("user.home") ?: ".", ".claude", "plans")
