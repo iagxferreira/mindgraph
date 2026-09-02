@@ -35,8 +35,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.NodeId
+import dev.mindgraph.model.NodeKind
 import dev.mindgraph.state.AppViewModel
+import dev.mindgraph.state.GraphFilter
 import dev.mindgraph.state.LayoutMode
+import dev.mindgraph.ui.shell.KindFilterBar
 import dev.mindgraph.ui.theme.Accent
 import dev.mindgraph.ui.theme.Blocked
 import dev.mindgraph.ui.theme.Border
@@ -61,8 +64,14 @@ fun GraphScreen(
     var pendingTarget by remember { mutableStateOf<Pair<NodeId, NodeId>?>(null) }
     var viewResetKey by remember { mutableStateOf(0) }
     var mode by remember { mutableStateOf(LayoutMode.Mind) }
+    var kindFilter by remember { mutableStateOf<NodeKind?>(null) }
 
     val graph = viewModel.graph
+
+    // Filtering hides nodes; it never moves them. Positions stay the layout's business, so a
+    // node is where you left it when the filter comes back off.
+    val visible = GraphFilter.apply(viewModel.nodes, viewModel.edges, kindFilter)
+    val kindCounts = viewModel.nodes.groupingBy { it.kind }.eachCount()
 
     LaunchedEffect(mode, viewModel.nodes, viewModel.edges) {
         viewModel.layout.mode = mode
@@ -73,8 +82,8 @@ fun GraphScreen(
 
     Box(modifier = modifier.fillMaxSize().background(Ink)) {
         GraphCanvas(
-            nodes = viewModel.nodes,
-            edges = viewModel.edges,
+            nodes = visible.nodes,
+            edges = visible.edges,
             graph = graph,
             layout = viewModel.layout,
             selectedNodeId = viewModel.selectedNodeId,
@@ -97,9 +106,14 @@ fun GraphScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ModeToggle(mode = mode, onChange = { mode = it })
+            KindFilterBar(
+                selected = kindFilter,
+                counts = kindCounts,
+                onSelect = { kindFilter = it },
+            )
             CountsPill(
-                nodeCount = viewModel.nodes.size,
-                edgeCount = viewModel.edges.size,
+                nodeCount = visible.nodes.size,
+                edgeCount = visible.edges.size,
                 readyCount = graph.readyTasks().size,
             )
         }

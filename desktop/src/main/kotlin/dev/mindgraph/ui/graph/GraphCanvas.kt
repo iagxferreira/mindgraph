@@ -14,8 +14,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.onPointerEvent
@@ -29,6 +32,7 @@ import dev.mindgraph.model.Edge
 import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
+import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.GraphLayoutEngine
 import dev.mindgraph.state.TaskGraph
@@ -149,16 +153,13 @@ fun GraphCanvas(
             val blocked = node.isTask && graph.isBlocked(node.id)
             val hue = nodeHue(node, blocked)
 
-            drawCircle(
-                color = hue.copy(alpha = if (emphasized) 0.42f else 0.16f),
-                radius = radius,
+            drawNodeShape(
+                kind = node.kind,
                 center = screen,
-            )
-            drawCircle(
-                color = if (emphasized) hue else hue.copy(alpha = 0.7f),
                 radius = radius,
-                center = screen,
-                style = Stroke(
+                fill = hue.copy(alpha = if (emphasized) 0.42f else 0.16f),
+                stroke = if (emphasized) hue else hue.copy(alpha = 0.7f),
+                strokeStyle = Stroke(
                     width = if (emphasized) 3f else 1.6f,
                     pathEffect = when {
                         blocked -> PathEffect.dashPathEffect(floatArrayOf(6f, 4f))
@@ -178,6 +179,48 @@ fun GraphCanvas(
             )
         }
     }
+}
+
+/**
+ * Shape says what a node *is*; colour still says what state its work is in, and radius still
+ * says how much time went into it. Three meanings, three channels, none of them borrowed.
+ */
+private fun DrawScope.drawNodeShape(
+    kind: NodeKind,
+    center: Offset,
+    radius: Float,
+    fill: Color,
+    stroke: Color,
+    strokeStyle: Stroke,
+) {
+    when (kind) {
+        NodeKind.Note -> {
+            drawCircle(color = fill, radius = radius, center = center)
+            drawCircle(color = stroke, radius = radius, center = center, style = strokeStyle)
+        }
+
+        NodeKind.Rfc -> {
+            // Slightly larger, because a diamond of equal radius reads smaller than a circle.
+            val path = diamondPath(center, radius * 1.18f)
+            drawPath(path, color = fill)
+            drawPath(path, color = stroke, style = strokeStyle)
+        }
+
+        NodeKind.Reference -> {
+            val side = radius * 1.62f
+            val topLeft = Offset(center.x - side / 2f, center.y - side / 2f)
+            drawRect(color = fill, topLeft = topLeft, size = Size(side, side))
+            drawRect(color = stroke, topLeft = topLeft, size = Size(side, side), style = strokeStyle)
+        }
+    }
+}
+
+private fun diamondPath(center: Offset, radius: Float): Path = Path().apply {
+    moveTo(center.x, center.y - radius)
+    lineTo(center.x + radius, center.y)
+    lineTo(center.x, center.y + radius)
+    lineTo(center.x - radius, center.y)
+    close()
 }
 
 private fun nodeHue(node: Node, blocked: Boolean): Color = when {
