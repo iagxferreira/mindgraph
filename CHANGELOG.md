@@ -6,6 +6,10 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **Codex repository instructions import.** The node list can now import nested
+  `AGENTS.md` files from `CODEX_WORKSPACE_ROOT` (defaulting to `~/workspace`) as
+  read-only, re-runnable context notes with their source path preserved.
+
 - **Claude's plan documents import as RFC nodes.** `~/.claude/plans/*.md` are design
   documents already — context, decision, rationale — and land as `kind: rfc`, linked to
   what the vault knows about the project their title names. A project mentioned only in the
