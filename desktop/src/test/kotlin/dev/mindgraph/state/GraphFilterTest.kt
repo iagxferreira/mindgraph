@@ -5,6 +5,8 @@ import dev.mindgraph.model.EdgeKind
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.NodeKind
+import dev.mindgraph.model.TaskFacet
+import dev.mindgraph.model.TaskStatus
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -19,6 +21,10 @@ class GraphFilterTest {
         createdAt = "",
         updatedAt = "",
         slug = title,
+    )
+
+    private fun doneTask(title: String) = node(title).copy(
+        task = TaskFacet(TaskStatus.Done),
     )
 
     private fun edge(from: Node, to: Node) = Edge(from.id, to.id, EdgeKind.RelatesTo)
@@ -71,5 +77,33 @@ class GraphFilterTest {
             nodes.filter { it.kind == NodeKind.Rfc }.map { it.id },
             visible.nodes.map { it.id },
         )
+    }
+
+    @Test
+    fun hidingDoneTasksLeavesNotesAndOpenTasksVisible() {
+        val openTask = node("Open").copy(task = TaskFacet(TaskStatus.Todo))
+        val done = doneTask("Done")
+        val visible = GraphFilter.apply(
+            listOf(note, openTask, done),
+            emptyList(),
+            kind = null,
+            includeDone = false,
+        )
+
+        assertEquals(listOf(note, openTask), visible.nodes)
+    }
+
+    @Test
+    fun hidingDoneTasksAlsoRemovesEdgesToHiddenNodes() {
+        val done = doneTask("Done")
+        val visible = GraphFilter.apply(
+            listOf(note, done),
+            listOf(edge(note, done)),
+            kind = null,
+            includeDone = false,
+        )
+
+        assertEquals(listOf(note), visible.nodes)
+        assertTrue(visible.edges.isEmpty())
     }
 }

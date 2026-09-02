@@ -3,6 +3,7 @@ package dev.mindgraph.state
 import dev.mindgraph.model.Edge
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeKind
+import dev.mindgraph.model.TaskStatus
 
 /** What the canvas draws once a filter is applied. */
 data class VisibleGraph(val nodes: List<Node>, val edges: List<Edge>)
@@ -21,11 +22,14 @@ object GraphFilter {
         edges: List<Edge>,
         kind: NodeKind?,
         includeArchived: Boolean = false,
+        includeDone: Boolean = true,
     ): VisibleGraph {
-        if (kind == null && includeArchived) return VisibleGraph(nodes, edges)
+        if (kind == null && includeArchived && includeDone) return VisibleGraph(nodes, edges)
 
         val visible = nodes.filter {
-            (kind == null || it.kind == kind) && (includeArchived || !it.archived)
+            (kind == null || it.kind == kind) &&
+                (includeArchived || !it.archived) &&
+                (includeDone || it.task?.status != TaskStatus.Done)
         }
         val ids = visible.mapTo(HashSet()) { it.id }
         // An edge needs both ends: half an edge is a line trailing off to nothing.

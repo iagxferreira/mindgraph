@@ -6,6 +6,9 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- A hide-done control on the all-nodes list and both graph modes, so completed task
+  nodes can be removed from working views without changing the vault.
+
 - **An MCP server hosted by the running app**, on loopback for as long as the window is
   open, so coding agents work the graph directly: `list_ready_tasks`, `create_task`,
   `link_nodes`, and `update_status`. Agents create new context nodes rather than
