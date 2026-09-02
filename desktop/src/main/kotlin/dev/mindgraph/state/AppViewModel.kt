@@ -128,6 +128,33 @@ class AppViewModel(
         }
     }
 
+    /**
+     * Adds to the end of a node's body and changes nothing else.
+     *
+     * Agents may not rewrite a node — that rule exists so a human's words cannot be silently
+     * replaced — but a running record of one piece of work belongs on that work, not scattered
+     * across new nodes. Appending is the narrow carve-out: it cannot destroy what is already
+     * there, so it is safe in a way that saving a whole body is not.
+     *
+     * Entries are separated by a blank line rather than a `---` rule, which markdown would
+     * read as a heading underline for the line above it.
+     */
+    suspend fun appendToBodyNow(nodeId: NodeId, content: String): Node? {
+        val addition = content.trim()
+        if (addition.isEmpty()) return null
+        val node = nodeById(nodeId) ?: return null
+
+        val existing = node.body.trimEnd()
+        val saved = store.save(
+            // A data-class copy of body alone: title, kind, task, due, assignee and archived
+            // are carried over by construction rather than by remembering to preserve them.
+            node.copy(body = if (existing.isEmpty()) addition else "$existing\n\n$addition"),
+        )
+        refresh()
+        statusMessage = "Appended"
+        return saved
+    }
+
     /** Titles linked in this node's body that don't exist yet — offer to create them. */
     fun danglingLinks(nodeId: NodeId): List<String> =
         nodeById(nodeId)?.let { WikiLinks.unresolved(it.body, nodes) }.orEmpty()
