@@ -1,5 +1,11 @@
 # MindGraph
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Kotlin](https://img.shields.io/badge/Kotlin-2.1-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
+[![Compose Multiplatform](https://img.shields.io/badge/Compose-Multiplatform-4285F4?logo=jetpackcompose&logoColor=white)](https://www.jetbrains.com/compose-multiplatform/)
+[![MCP](https://img.shields.io/badge/MCP-server%20built%20in-000000)](#agents-work-the-graph)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)](#getting-started)
+
 MindGraph is a second brain built on a graph. Notes, tasks, and tracked time are the
 same kind of thing — a **node** — so a thought can become work without becoming a
 second record, and the dependencies between them form a graph you can actually read.
@@ -59,6 +65,12 @@ task controls in the header — "Make this a task" is a button, not a different 
 Type `[[a note title]]` in the body and it becomes a link.
 
 ![The markdown editor with task status](assets/screenshots/note-editor.png)
+
+**Your coding agent's memory, in the same graph.** Claude Code writes notes per project
+— markdown, frontmatter, `[[wikilinks]]`, one fact per file — and seals each set in its own
+directory, so nothing can read them together. One button imports the lot, links and all,
+and re-running only brings in what is new. Read-only upstream: your `~/.claude` is never
+written to.
 
 **Archive instead of deleting.** A node can be put away and keep its id, its links and
 its tracked time. Archiving is not a fifth status, because that would overwrite whether
@@ -143,10 +155,16 @@ Markdown is the truth. See [[Pick the node schema]] for why.
 This has consequences worth knowing:
 
 - **Edit in any editor.** Files you hand-write load exactly like files the app wrote.
+- **Changes appear as you make them.** The vault is watched, so an edit from another
+  editor, an agent in another process, or a `git checkout` lands on the graph without a
+  reload.
 - **Fields you add are kept.** Unknown frontmatter keys survive round trips.
 - **Rename freely.** The `id` is a ULID and never changes, so renaming a file or a
   title never breaks a link.
 - **Version it.** A vault is plain text, so `git init` in it works.
+- **Link by any name it answers to.** A node is found by its title, its filename slug, or
+  any `aliases:` you give it — which is how an imported note keeps working when its title
+  is a whole sentence and its siblings link it by a short slug.
 - **Delete a link, delete the edge.** `[[wikilinks]]` are read from the body every
   load and never copied into frontmatter, so nothing is left stranded.
 - **A typo costs a label, not a document.** An unreadable `kind` reads as a note, an
@@ -181,10 +199,14 @@ cd desktop
 ./gradlew run
 ```
 
-The vault directory is created on first launch. There is no import step: drop markdown
-files into `nodes/` and they show up, as long as each carries a unique ULID `id` in its
-frontmatter. Files without one are skipped rather than rewritten, so an unrelated
-markdown file sitting in the folder is left alone.
+The vault directory is created on first launch. There is no import step for your own
+markdown: drop files into `nodes/` and they show up, as long as each carries a unique ULID
+`id` in its frontmatter. Files without one are skipped rather than rewritten, so an
+unrelated markdown file sitting in the folder is left alone.
+
+If you use Claude Code, the import button on the node list pulls in
+`~/.claude/projects/*/memory/*.md` — every project's memory notes as one graph, with the
+links between them resolved. It is safe to press again as those notes accumulate.
 
 ## Useful commands
 
@@ -229,6 +251,7 @@ The graph is meant to become the unifying surface over every kind of entity, not
 visualization bolted onto notes. The agent layer is no longer the plan — it is the
 current work.
 
-Next: retrieval that follows edges rather than strings, so an agent asking about a
-topic gets the neighbourhood around it; and importing the notes coding agents already
-write, which sit siloed per project and have never been readable as one graph.
+Importing the notes coding agents already write has landed — they sat siloed per project
+and were never readable as one graph. Next is retrieval that follows those edges rather
+than matching strings, so an agent asking about a topic gets the neighbourhood around it,
+across every project at once. That is the thing per-project memory structurally cannot do.
