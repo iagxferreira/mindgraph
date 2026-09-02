@@ -6,6 +6,11 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **Claude's plan documents import as RFC nodes.** `~/.claude/plans/*.md` are design
+  documents already — context, decision, rationale — and land as `kind: rfc`, linked to
+  what the vault knows about the project their title names. A project mentioned only in the
+  body is not treated as the subject: against the real plans that produced a wrong edge.
+
 - **Imported wikilinks resolve into edges.** A node can now answer to more than one name:
   `aliases` in frontmatter, and the `memoryName` an import records. Claude's memory notes
   link each other by slug while their titles are full sentences, so those links resolved to
