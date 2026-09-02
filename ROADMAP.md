@@ -33,6 +33,8 @@ and what it unblocks. This file is the readable summary, not the source of truth
 - **Imported wikilinks resolve into edges.** A node answers to its title, its slug, and
   any alias — which is how a note linked as `[[its-memory-name]]` is found when its title
   is a whole sentence.
+- **Claude Code's plans import as RFC nodes**, linked to the project their title names —
+  which makes the `rfc` kind real rather than an empty category.
 - **Claude Code's memory notes import into the vault**, re-runnably and read-only
   upstream, keeping `origin`, `originProject`, `memoryName` and `memoryType` in
   frontmatter. `memoryType` is deliberately *not* mapped onto `kind`: one says what a fact
@@ -45,8 +47,6 @@ and what it unblocks. This file is the readable summary, not the source of truth
 The memory import has landed; the plans import and wikilink resolution are what it
 unblocks.
 
-- **Import `~/.claude/plans/*.md` as RFC nodes.** They are RFCs already, without the
-  label.
 - **Retrieval over MCP**: `search_notes`, then `related_notes` — walking edges rather
   than matching strings, and crossing projects, which per-project memory structurally
   cannot do.

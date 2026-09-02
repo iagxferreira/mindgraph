@@ -149,11 +149,16 @@ decays on its own, because time moves.
 task controls in the header — "Make this a task" is a button, not a different screen.
 Type `[[a note title]]` in the body and it becomes a link.
 
-**Your coding agent's memory, in the same graph.** Claude Code writes notes per project
-— markdown, frontmatter, `[[wikilinks]]`, one fact per file — and seals each set in its own
-directory, so nothing can read them together. One button imports the lot, links and all,
-and re-running only brings in what is new. Read-only upstream: your `~/.claude` is never
-written to.
+**Your coding agent's memory and plans, in the same graph.** Claude Code writes notes per
+project — markdown, frontmatter, `[[wikilinks]]`, one fact per file — and seals each set in
+its own directory, so nothing can read them together. Its plan documents are RFCs already,
+context and decision and rationale, just without the label. One button imports both, links
+and all: notes as notes, plans as `rfc` nodes tied to the project they name. Re-running only
+brings in what is new, and it is read-only upstream — your `~/.claude` is never written to.
+
+A plan is linked by what its *title* names, not what its body mentions. A design document
+that references another repository in passing is not about that repository, and an edge
+that says otherwise is worse than no edge at all.
 
 **Archive instead of deleting.** A node can be put away and keep its id, its links and
 its tracked time. Archiving is not a fifth status, because that would overwrite whether
