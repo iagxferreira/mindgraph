@@ -2,6 +2,7 @@ package dev.mindgraph.state
 
 import androidx.compose.runtime.mutableStateMapOf
 import dev.mindgraph.model.Edge
+import dev.mindgraph.model.EdgeKind
 import kotlin.math.cos
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -65,27 +66,42 @@ class GraphLayoutEngine {
         this.edges = edges
     }
 
-    /**
-     * Places each node in the column matching its dependency depth, stacked within the column.
-     * Positions ease toward these targets in [step] so switching modes reads as a movement
-     * rather than a cut.
-     */
+    /** Places prerequisites above their dependents, centering each prerequisite over its branch. */
     fun setFlowRanks(ranks: Map<String, Int>) {
         flowTargets.clear()
         if (ranks.isEmpty()) return
 
-        val columnWidth = 260f
-        val rowHeight = 96f
-        val byRank = ranks.entries.groupBy({ it.value }, { it.key })
-        val maxRank = byRank.keys.maxOrNull() ?: 0
+        val nodeSpacing = 180f
+        val rowHeight = 150f
+        val dependencies = edges
+            .filter { it.kind == EdgeKind.DependsOn }
+            .groupBy({ it.targetId.value }, { it.sourceId.value })
+            .mapValues { (_, children) -> children.distinct().sorted() }
+        val parentIds = dependencies.values.flatten().toSet()
+        val roots = ranks.keys.filter { it !in parentIds }.sorted()
+        val xPositions = HashMap<String, Float>()
+        var leafCursor = 0
 
-        byRank.forEach { (rank, idsInRank) ->
-            val ordered = idsInRank.sorted()
-            ordered.forEachIndexed { index, id ->
-                val x = (rank - maxRank / 2f) * columnWidth
-                val y = (index - (ordered.size - 1) / 2f) * rowHeight
-                flowTargets[id] = Vec2(x, y)
+        fun place(id: String): Float {
+            xPositions[id]?.let { return it }
+            val children = dependencies[id].orEmpty()
+            val x = if (children.isEmpty()) {
+                leafCursor++ * nodeSpacing
+            } else {
+                children.map(::place).average().toFloat()
             }
+            xPositions[id] = x
+            return x
+        }
+
+        roots.forEach(::place)
+        ranks.keys.filter { it !in xPositions }.sorted().forEach(::place)
+
+        val centerX = ((xPositions.values.minOrNull() ?: 0f) + (xPositions.values.maxOrNull() ?: 0f)) / 2f
+        val maxRank = ranks.values.maxOrNull() ?: 0
+        val centerY = maxRank * rowHeight / 2f
+        xPositions.forEach { (id, x) ->
+            flowTargets[id] = Vec2(x - centerX, (ranks[id] ?: 0) * rowHeight - centerY)
         }
     }
 

@@ -39,6 +39,18 @@ class WorkSummaryTest {
     }
 
     @Test
+    fun theSplitRetainsTimePerAgentForNodeBars() {
+        val task = node("A task")
+
+        val split = WorkSummary.splitOf(
+            listOf(agent(task, 600, "claude-code"), agent(task, 300, "cursor")),
+        )
+
+        assertEquals(600L, split.agents["claude-code"])
+        assertEquals(300L, split.agents["cursor"])
+    }
+
+    @Test
     fun nothingTrackedIsNotAllMachine() {
         // A share computed from an empty total must not read as 100% machine.
         assertEquals(0f, WorkSummary.splitOf(emptyList()).agentShare)
