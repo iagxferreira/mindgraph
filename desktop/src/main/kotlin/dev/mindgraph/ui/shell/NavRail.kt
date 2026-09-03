@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -27,6 +29,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import java.nio.file.Path
 import dev.mindgraph.ui.theme.Accent
 import dev.mindgraph.ui.theme.BrandPlate
 import dev.mindgraph.ui.theme.Surface
@@ -50,6 +53,9 @@ private val RailWidth = 60.dp
 fun NavRail(
     current: Destination,
     onSelect: (Destination) -> Unit,
+    vaultRoot: Path,
+    recentVaults: List<Path>,
+    onOpenVault: (Path) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -65,6 +71,11 @@ fun NavRail(
                 onClick = { onSelect(destination) },
             )
         }
+        // Below the destinations and set apart, because it is a different question: those choose
+        // what to look at inside a vault, this chooses which vault that is.
+        Spacer(Modifier.weight(1f))
+        VaultSwitcher(current = vaultRoot, recent = recentVaults, onOpen = onOpenVault)
+        Spacer(Modifier.size(8.dp))
     }
 }
 

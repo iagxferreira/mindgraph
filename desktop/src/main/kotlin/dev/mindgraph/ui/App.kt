@@ -34,6 +34,8 @@ import dev.mindgraph.state.LinkOutcome
 import dev.mindgraph.storage.NodeStore
 import dev.mindgraph.storage.SessionLog
 import dev.mindgraph.storage.Vault
+import java.nio.file.Path
+import dev.mindgraph.storage.VaultDirectory
 import dev.mindgraph.storage.VaultWatcher
 import dev.mindgraph.ui.graph.GraphScreen
 import dev.mindgraph.ui.notes.NotesScreen
@@ -54,12 +56,22 @@ import kotlinx.coroutines.withContext
 fun App() {
     MindGraphTheme {
         Surface(modifier = Modifier.fillMaxSize(), color = Ink) {
+            val directory = remember { VaultDirectory() }
+            var vaultRoot by remember { mutableStateOf(directory.lastOpened()) }
             var viewModel by remember { mutableStateOf<AppViewModel?>(null) }
 
-            LaunchedEffect(Unit) {
+            // Keyed on the path, so choosing another vault rebuilds everything that was bound to
+            // the old one — store, session log and watcher together. The watcher especially: it
+            // is registered on a directory and would otherwise keep reporting the vault nobody
+            // is looking at any more.
+            LaunchedEffect(vaultRoot) {
+                val previous = viewModel
+                viewModel = null
+                previous?.close()
                 val vault = withContext(Dispatchers.IO) {
-                    Vault.default().also { it.prepare() }
+                    Vault(vaultRoot).also { it.prepare() }
                 }
+                directory.remember(vaultRoot)
                 viewModel = AppViewModel(NodeStore(vault), SessionLog(vault), VaultWatcher(vault))
             }
 
@@ -141,7 +153,12 @@ fun App() {
                     CircularProgressIndicator()
                 }
             } else {
-                AppShell(model)
+                AppShell(
+                    viewModel = model,
+                    vaultRoot = vaultRoot,
+                    recentVaults = remember(vaultRoot) { directory.recent() },
+                    onOpenVault = { vaultRoot = it },
+                )
             }
         }
     }
@@ -152,7 +169,12 @@ fun App() {
  * spans two destinations: you start it on a node and finish it on the graph.
  */
 @Composable
-private fun AppShell(viewModel: AppViewModel) {
+private fun AppShell(
+    viewModel: AppViewModel,
+    vaultRoot: Path,
+    recentVaults: List<Path>,
+    onOpenVault: (Path) -> Unit,
+) {
     var destination by remember { mutableStateOf(Destination.Graph) }
     var linkSourceId by remember { mutableStateOf<NodeId?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -168,7 +190,13 @@ private fun AppShell(viewModel: AppViewModel) {
 
     Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { padding ->
         Row(modifier = Modifier.fillMaxSize().padding(padding)) {
-            NavRail(current = destination, onSelect = { destination = it })
+            NavRail(
+                current = destination,
+                onSelect = { destination = it },
+                vaultRoot = vaultRoot,
+                recentVaults = recentVaults,
+                onOpenVault = onOpenVault,
+            )
             VerticalDivider()
 
             when (destination) {
