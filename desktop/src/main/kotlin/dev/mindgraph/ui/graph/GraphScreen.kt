@@ -54,6 +54,7 @@ import dev.mindgraph.state.GraphFilter
 import dev.mindgraph.state.Clustering
 import dev.mindgraph.state.LayoutMode
 import dev.mindgraph.ui.shell.KindFilterBar
+import dev.mindgraph.ui.shell.WorkspaceSwitcher
 import dev.mindgraph.ui.theme.Accent
 import dev.mindgraph.ui.theme.Blocked
 import dev.mindgraph.ui.theme.Context
@@ -90,7 +91,9 @@ fun GraphScreen(
     // the engine is driven with the visible set rather than the vault. Hiding a node therefore
     // rebuilds the picture around what is left instead of leaving a hole where it used to sit.
     val visible = GraphFilter.apply(
-        viewModel.nodes,
+        // The workspace narrows first, then the filters narrow that. A workspace is what you
+        // are looking at; a filter is how you are looking at it.
+        viewModel.visibleNodes,
         viewModel.edges,
         kindFilter,
         showArchived,
@@ -105,8 +108,8 @@ fun GraphScreen(
     // Flow does not draw the visible set at all. Its subject is the tasks that participate in
     // a dependency, and the forest works out their positions as one decision, so it replaces
     // both the node list and the layout rather than filtering what the other modes show.
-    val forest = remember(viewModel.nodes, hideDone, showArchived) {
-        FlowForest.build(viewModel.nodes, includeDone = !hideDone, includeArchived = showArchived)
+    val forest = remember(viewModel.visibleNodes, hideDone, showArchived) {
+        FlowForest.build(viewModel.visibleNodes, includeDone = !hideDone, includeArchived = showArchived)
     }
     val drawn = if (mode == LayoutMode.Flow) {
         // Edges are re-derived over the forest's own nodes so a chain does not trail a line off
@@ -165,6 +168,13 @@ fun GraphScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ModeToggle(mode = mode, onChange = { mode = it })
+            WorkspaceSwitcher(
+                workspaces = viewModel.workspaces,
+                active = viewModel.activeWorkspace,
+                suggestions = remember(viewModel.nodes) { viewModel.suggestedWorkspaces() },
+                onSelect = { viewModel.selectWorkspace(it) },
+                onCreate = { title, rule -> viewModel.createWorkspace(title, rule) },
+            )
             if (mode == LayoutMode.Flow) {
                 // No kind filter here. Flow's subject is a dependency chain, and narrowing it
                 // to one kind would cut trees in half - which is the failure this mode was

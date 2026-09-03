@@ -113,7 +113,9 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     var showArchived by remember { mutableStateOf(false) }
     var pendingFolder by remember { mutableStateOf<Path?>(null) }
 
-    val filteredNodes = viewModel.nodes.filter {
+    // Through the same lens as the graph: a workspace that narrowed one view and not the other
+    // would make the two disagree about what the vault contains.
+    val filteredNodes = viewModel.visibleNodes.filter {
         it.archived == showArchived &&
             (showArchived || !hideDone || it.task?.status != TaskStatus.Done)
     }
