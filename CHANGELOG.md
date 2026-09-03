@@ -6,6 +6,21 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **`related_notes` over MCP — context as a document, not a list of hits.** Give it a topic and
+  it finds the starting node, walks the graph outwards and returns the neighbourhood as one
+  markdown document to read straight into context: nearest first, a curated `context_for` link
+  outranking an inferred one at the same distance, cut to a token budget, with whatever did not
+  fit listed at the end rather than silently dropped.
+
+  Traversal rather than matching, so a note that never repeats your words still arrives — and it
+  crosses every project, which per-project agent memory structurally cannot. Edges are walked in
+  both directions, because `context_for` points from the note to the work it serves and the
+  curated case is entirely incoming.
+
+  Its acceptance test is the Goldfish test: hand a blank agent only this document and it should
+  be able to start. That is why the bundle carries the bodies of what it names and not just the
+  titles — a title is a second lookup, and a goldfish cannot make one.
+
 - **`context_for` edges — the first half of the context builder.** A project is a node, and its
   context is its edges: starting one means creating a node and linking in what an agent should
   load before working on it. Deliberately not `relates_to` — "these two ideas are related" is not

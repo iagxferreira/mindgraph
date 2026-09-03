@@ -47,12 +47,13 @@ and what it unblocks. This file is the readable summary, not the source of truth
 
 ## Next Milestone
 
-The memory import has landed; the plans import and wikilink resolution are what it
-unblocks.
+Retrieval has landed. `search_notes` matches strings; `related_notes` walks edges and
+returns the neighbourhood as one budgeted document, and `context_for` edges let you curate
+what that document contains rather than only deriving it.
 
-- **Retrieval over MCP**: `search_notes`, then `related_notes` — walking edges rather
-  than matching strings, and crossing projects, which per-project memory structurally
-  cannot do.
+- **Make the bundle worth trusting**: the Goldfish test is an acceptance criterion in the
+  test suite, not something the app can tell you about a real project yet. A curated bundle
+  that is missing something is indistinguishable from a good one until an agent fails.
 
 ## After That
 
