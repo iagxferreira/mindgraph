@@ -26,8 +26,22 @@ build:
 clean:
 	cd desktop && ./gradlew clean
 
+# packageDistributionForCurrentOS builds every format configured for this OS, and jpackage
+# refuses a format whose tool is absent - "Invalid or unsupported type: [deb]" on a machine
+# without dpkg-deb. Both Deb and Rpm are configured on purpose, so the target picks the one
+# this host can actually produce rather than failing on the other.
 package:
-	cd desktop && ./gradlew packageDistributionForCurrentOS
+	@if [ "$$(uname -s)" != "Linux" ]; then \
+		cd desktop && ./gradlew packageDistributionForCurrentOS; \
+	elif command -v rpmbuild >/dev/null 2>&1; then \
+		cd desktop && ./gradlew packageRpm; \
+	elif command -v dpkg-deb >/dev/null 2>&1; then \
+		cd desktop && ./gradlew packageDeb; \
+	else \
+		echo "No rpmbuild or dpkg-deb found - building an unpacked distributable instead."; \
+		echo "Install rpm-build (Fedora) or dpkg (Debian) for an installable package."; \
+		cd desktop && ./gradlew createDistributable; \
+	fi
 
 # jpackage's own entry is installed by xdg-desktop-menu from the package's post-install
 # scriptlet, which runs as root and lands it in root's home rather than a shared directory.
