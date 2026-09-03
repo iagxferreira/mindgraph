@@ -10,6 +10,7 @@ import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskFacet
 import dev.mindgraph.model.TaskStatus
+import dev.mindgraph.model.Workspace
 import dev.mindgraph.model.WorkSession
 import dev.mindgraph.model.Worker
 import dev.mindgraph.model.currentUnixTimestamp
@@ -61,6 +62,53 @@ class AppViewModel(
         private set
     var statusMessage by mutableStateOf("Ready")
         private set
+
+    /**
+     * The workspace being looked through, or null for the whole vault.
+     *
+     * Held as an id rather than a node so it survives a reload: the vault is watched, and the
+     * node object is replaced every time anything on disk changes.
+     */
+    var activeWorkspaceId by mutableStateOf<NodeId?>(null)
+
+    /** Every node that is also a saved selection. */
+    val workspaces: List<Node> get() = nodes.filter { it.workspace != null }.sortedBy { it.title.lowercase() }
+
+    val activeWorkspace: Node? get() = activeWorkspaceId?.let { id -> nodes.find { it.id == id } }
+
+    /**
+     * What the app should show: the active workspace resolved, or everything.
+     *
+     * The workspace node itself is kept out of its own selection. A saved view listing itself
+     * among the things it selects is noise, and on the canvas it would sit inside the group it
+     * describes.
+     */
+    val visibleNodes: List<Node>
+        get() = activeWorkspace?.let { active ->
+            Workspaces.resolve(nodes, active.workspace!!).filterNot { it.id == active.id }
+        } ?: nodes
+
+    fun selectWorkspace(nodeId: NodeId?) {
+        activeWorkspaceId = nodeId
+    }
+
+    /** Folders a workspace could be made from, largest first, for roots the vault imported. */
+    fun suggestedWorkspaces(): List<Triple<String, String, Int>> =
+        Workspaces.importRoots(nodes).flatMap { (_, root) ->
+            Workspaces.suggestFolders(nodes, root).map { (folder, count) ->
+                Triple(folder, "$root/$folder", count)
+            }
+        }.sortedByDescending { it.third }
+
+    fun createWorkspace(title: String, rule: Workspace.Rule) {
+        scope.launch {
+            val created = store.create(title = title, body = "", kind = NodeKind.Reference)
+            store.save(created.copy(workspace = Workspace(rule)))
+            refresh()
+            activeWorkspaceId = created.id
+            statusMessage = "Workspace \"$title\" created"
+        }
+    }
 
     /** The node whose timer is running, plus when it started. Null when nothing is tracking. */
     var runningNodeId by mutableStateOf<NodeId?>(null)
