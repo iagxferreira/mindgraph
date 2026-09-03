@@ -17,6 +17,7 @@ import dev.mindgraph.storage.MemoryImport
 import dev.mindgraph.storage.NodeStore
 import dev.mindgraph.storage.PlanImport
 import dev.mindgraph.storage.CodexImport
+import dev.mindgraph.storage.FolderImport
 import dev.mindgraph.storage.SessionLog
 import dev.mindgraph.storage.VaultWatcher
 import dev.mindgraph.storage.WikiLinks
@@ -326,6 +327,60 @@ class AppViewModel(
 
     fun importCodexAgents() {
         scope.launch { importCodexAgentsNow() }
+    }
+
+    /**
+     * Copies a folder of markdown into the vault, skipping files already imported.
+     *
+     * The upstream folder is never written to. `origin` on each new node records where it came
+     * from, which is both how a re-run knows to skip it and where to look if the original is
+     * wanted - the copy is the vault's from the moment it lands.
+     */
+    suspend fun importFolderNow(
+        root: Path,
+        kind: NodeKind = FolderImport.suggestedKind(root),
+        project: String = FolderImport.projectNameFor(root),
+    ): FolderImportResult {
+        val files = FolderImport.scan(root)
+        val alreadyImported = store.frontmatterValues(FolderImport.KEY_ORIGIN)
+        var imported = 0
+        var skipped = 0
+        var unreadable = 0
+        for (file in files) {
+            if (file.toAbsolutePath().toString() in alreadyImported) {
+                skipped++
+                continue
+            }
+            val document = FolderImport.read(file, root, kind, project)
+            if (document == null) {
+                // Empty, unreadable, or already a MindGraph node. Counted rather than reported
+                // one by one: a folder of five is a message, a folder of three hundred is noise.
+                unreadable++
+                continue
+            }
+            store.create(
+                title = document.title,
+                body = document.body,
+                task = null,
+                kind = document.kind,
+                extras = FolderImport.extrasFor(document),
+            )
+            imported++
+        }
+        refresh()
+        val result = FolderImportResult(
+            imported = imported,
+            skipped = skipped,
+            unreadable = unreadable,
+            filesFound = files.size,
+            folderName = root.fileName?.toString() ?: root.toString(),
+        )
+        statusMessage = result.summary()
+        return result
+    }
+
+    fun importFolder(root: Path, kind: NodeKind, project: String) {
+        scope.launch { importFolderNow(root, kind, project) }
     }
 
     /** Titles linked in this node's body that don't exist yet — offer to create them. */
@@ -641,6 +696,26 @@ data class MemoryImportResult(
         imported == 0 -> "Nothing to import"
         skipped > 0 -> "Imported $imported note(s), $skipped already there"
         else -> "Imported $imported note(s)"
+    }
+}
+
+/**
+ * What importing a folder did. Reports what it left alone as well as what it took, because a
+ * re-run of an unchanged folder is a legitimate outcome and should not read as a failure.
+ */
+data class FolderImportResult(
+    val imported: Int,
+    val skipped: Int,
+    val unreadable: Int,
+    val filesFound: Int,
+    val folderName: String,
+) {
+    fun summary(): String = when {
+        filesFound == 0 -> "No markdown found in $folderName"
+        imported == 0 && skipped > 0 -> "$folderName already imported ($skipped file(s))"
+        imported == 0 -> "Nothing to import from $folderName"
+        skipped > 0 -> "Imported $imported from $folderName, $skipped already there"
+        else -> "Imported $imported file(s) from $folderName"
     }
 }
 
