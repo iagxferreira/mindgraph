@@ -27,6 +27,7 @@ import java.nio.file.Path
 import java.nio.file.Paths
 import java.time.Instant
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -134,6 +135,18 @@ class AppViewModel(
         watcher?.let { source ->
             scope.launch { source.changes().collect { refresh() } }
         }
+    }
+
+    /**
+     * Stops everything this view model owns.
+     *
+     * Switching vaults builds a second view model, and without this the first one's watcher keeps
+     * a WatchService registered on the old directory and keeps reloading a vault nobody is
+     * looking at. Cancelling the scope is enough: the watcher polls rather than blocking, and
+     * closes its service in a `finally`.
+     */
+    fun close() {
+        scope.cancel()
     }
 
     suspend fun refresh() {
