@@ -42,6 +42,11 @@ compose.desktop {
             targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Dmg, TargetFormat.Msi)
             packageName = "MindGraph"
             packageVersion = "1.0.0"
+            // jlink builds a minimal runtime from what it can see, and it cannot see a class
+            // reached only by name. `jdk.httpserver` is the MCP server, so without it the
+            // packaged app starts and then cannot serve agents at all - which is most of the
+            // product. Sourced from `./gradlew suggestRuntimeModules` rather than guessed.
+            modules("java.instrument", "jdk.httpserver", "jdk.unsupported")
             description = "A context layer for coding agents, in the shape of a graph you can read."
             vendor = "Iago Ferreira"
             licenseFile.set(rootProject.file("../LICENSE"))
