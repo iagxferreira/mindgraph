@@ -36,6 +36,13 @@ val AccentSoft: Color get() = Accent.copy(alpha = 0.35f)
  */
 val Context = Color(0xFFD08BC7)
 
+/**
+ * The ground the brand mark sits on. The logo is drawn in [Accent] with near-[Ink] connectors,
+ * so it needs a light plate: on the accent its own nodes vanish, and on the dark rail its two
+ * unfilled nodes do. Not quite white, so it does not glare out of a dark window.
+ */
+val BrandPlate = Color(0xFFEDEEF2)
+
 private val MindGraphColorScheme = darkColorScheme(
     background = Ink,
     surface = Surface,

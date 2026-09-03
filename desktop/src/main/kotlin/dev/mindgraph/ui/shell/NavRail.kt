@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,17 +17,18 @@ import androidx.compose.material.icons.outlined.Hub
 import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.foundation.clickable
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.Image
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import dev.mindgraph.ui.theme.Accent
-import dev.mindgraph.ui.theme.Ink
+import dev.mindgraph.ui.theme.BrandPlate
 import dev.mindgraph.ui.theme.Surface
 import dev.mindgraph.ui.theme.TextMuted
 
@@ -73,10 +75,23 @@ private fun BrandMark() {
             .padding(vertical = 14.dp)
             .size(30.dp)
             .clip(RoundedCornerShape(8.dp))
-            .background(Accent),
+            // A light plate rather than the accent. The mark is drawn in the accent violet
+            // itself, so on an accent square its own nodes disappear into the background and
+            // only the dark connectors survive - and on the bare dark rail the opposite happens,
+            // the two unfilled nodes vanish and the M stops being an M. Light is the one ground
+            // every part of it reads on.
+            .background(BrandPlate)
+            .padding(3.dp),
         contentAlignment = Alignment.Center,
     ) {
-        Text("M", style = MaterialTheme.typography.titleMedium, color = Ink)
+        Image(
+            painter = painterResource("mindgraph-icon.png"),
+            // Named for what it is rather than described: at 30dp the mark is an identifier, and
+            // reading its shape aloud helps nobody.
+            contentDescription = "MindGraph",
+            contentScale = ContentScale.Fit,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 
