@@ -215,14 +215,23 @@ class NodeStore(private val vault: Vault) {
     }
 
     /**
-     * Aliases come from [KEY_ALIASES], plus [MemoryImport.KEY_MEMORY_NAME] when it is there.
+     * Aliases come from [KEY_ALIASES], plus the names an import recorded: a memory note's
+     * `memoryName` and a folder document's `documentName`.
      *
      * The importer wrote only the memory name before aliases existed, and those notes are
      * already in people's vaults — re-importing would not reach them, because the import skips
-     * anything it has seen. Reading both is what makes those links resolve without a migration.
+     * anything it has seen. Reading them all is what makes those links resolve without a
+     * migration, which matters most for an Obsidian vault: it links by filename while titles
+     * are headings, so without `documentName` every such link resolves to nothing.
      */
     private fun readAliases(frontmatter: Frontmatter): List<String> =
-        (frontmatter.list(KEY_ALIASES) + listOfNotNull(frontmatter.string(MemoryImport.KEY_MEMORY_NAME)))
+        (
+            frontmatter.list(KEY_ALIASES) +
+                listOfNotNull(
+                    frontmatter.string(MemoryImport.KEY_MEMORY_NAME),
+                    frontmatter.string(FolderImport.KEY_DOCUMENT_NAME),
+                )
+            )
             .map { it.trim() }
             .filter { it.isNotEmpty() }
             .distinct()

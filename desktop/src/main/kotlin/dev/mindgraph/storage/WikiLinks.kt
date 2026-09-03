@@ -8,17 +8,29 @@ import dev.mindgraph.model.NodeId
  * dependencies; this exists so linking while writing costs nothing but two brackets.
  */
 object WikiLinks {
-    private val PATTERN = Regex("\\[\\[([^\\[\\]|]+)(?:\\|[^\\[\\]]*)?]]")
+    // The leading `!` is captured rather than excluded so an embed can be recognised and dropped.
+    private val PATTERN = Regex("(!?)\\[\\[([^\\[\\]|]+)(?:\\|[^\\[\\]]*)?]]")
 
+    /**
+     * The names linked in a body.
+     *
+     * `![[picture.png]]` is an embed - an image or an attachment placed in the text, not a
+     * reference to a note. Counting those as links puts an edge to nothing in the graph for
+     * every image in a vault, and offers to create a note called `20220412011351.png`.
+     */
     fun titlesIn(body: String): List<String> =
-        PATTERN.findAll(body).map { it.groupValues[1].trim() }.filter { it.isNotEmpty() }.toList()
+        PATTERN.findAll(body)
+            .filter { it.groupValues[1].isEmpty() }
+            .map { it.groupValues[2].trim() }
+            .filter { it.isNotEmpty() }
+            .toList()
 
     /** Unresolvable links are dropped rather than erroring — you may link ahead of writing. */
     fun resolve(body: String, nodes: List<Node>): List<NodeId> {
         if (nodes.isEmpty()) return emptyList()
         val index = index(nodes)
         return titlesIn(body)
-            .mapNotNull { index[it.trim().lowercase()] }
+            .mapNotNull { lookup(index, it) }
             .distinct()
     }
 
@@ -26,8 +38,22 @@ object WikiLinks {
     fun unresolved(body: String, nodes: List<Node>): List<String> {
         val index = index(nodes)
         return titlesIn(body)
-            .filter { it.trim().lowercase() !in index }
+            .filter { lookup(index, it) == null }
             .distinct()
+    }
+
+    /**
+     * A name, then its last path segment.
+     *
+     * Obsidian writes the path when a name is ambiguous across folders —
+     * `[[estudos/linguagens/elixir/roadmap]]` — and matching the whole string misses the note
+     * whose name is sitting right there at the end of it. The full string is tried first, so a
+     * note genuinely called `a/b` still wins over the leaf of some other link.
+     */
+    private fun lookup(index: Map<String, NodeId>, target: String): NodeId? {
+        val name = target.trim().lowercase()
+        index[name]?.let { return it }
+        return name.substringAfterLast('/').takeIf { it != name && it.isNotEmpty() }?.let { index[it] }
     }
 
     /**
