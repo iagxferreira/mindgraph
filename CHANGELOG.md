@@ -6,6 +6,12 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **The working agreement is served over MCP** as the resource `mindgraph://working-agreement`
+  and the prompt `working-agreement`, so an agent in any repository can learn how to use the
+  vault without a file being installed. Deliberately not a tool that writes into `~/.claude/` —
+  that would be the server reaching into the client's configuration. `make install-agent-skill`
+  adds a pointer-only stub for Claude Code, which auto-loads skills but not prompts.
+
 - **The MCP server is registered at user scope**, so an agent working in *any* repository
   reaches the same vault. Registered per project it was reachable only from the repository it
   was registered in, which is precisely the silo MindGraph exists to remove.

@@ -1,6 +1,6 @@
 SHELL := /bin/sh
 
-.PHONY: help run test build clean package install-desktop-entry
+.PHONY: help run test build clean package install-desktop-entry install-agent-skill
 
 help:
 	@printf '%s\n' \
@@ -12,7 +12,8 @@ help:
 		'' \
 		'linux packaging:' \
 		'  make package              - build a native installer for this OS' \
-		'  make install-desktop-entry - add the launcher entry (after installing the package)'
+		'  make install-desktop-entry - add the launcher entry (after installing the package)' \
+		'  make install-agent-skill   - let Claude Code find the vault from any repository'
 
 run:
 	cd desktop && ./gradlew run
@@ -54,3 +55,13 @@ install-desktop-entry:
 		"$${XDG_DATA_HOME:-$$HOME/.local/share}/applications/mindgraph.desktop"
 	-update-desktop-database "$${XDG_DATA_HOME:-$$HOME/.local/share}/applications"
 	@echo "Installed. Restart MindGraph so the desktop can match the window to the entry."
+
+# Claude Code loads a skill by matching its description, but will not auto-invoke an MCP prompt -
+# so a stub is still needed for the automatic case even though the agreement itself is served by
+# the app. The stub carries a pointer and no rules, so there is nothing here to drift.
+install-agent-skill:
+	install -Dm644 packaging/skills/mindgraph/SKILL.md \
+		"$${CLAUDE_CONFIG_DIR:-$$HOME/.claude}/skills/mindgraph/SKILL.md"
+	@echo "Installed for Claude Code."
+	@echo "Other agents: point them at the MCP resource mindgraph://working-agreement,"
+	@echo "or the prompt 'working-agreement' on the mindgraph server."

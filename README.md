@@ -96,8 +96,21 @@ SSH tunnel or another deliberately secured transport rather than opening the por
 Set `MINDGRAPH_MCP_PORT` to move it. If the port is busy the app says so and starts
 anyway — MindGraph without MCP is still MindGraph.
 
-Agents working on this repository should also load the workflow skill at
-`.claude/skills/mindgraph-workflow/SKILL.md`. The file is plain Markdown, so agents
+**The working agreement is served, not installed.** The server offers it as the resource
+`mindgraph://working-agreement` and as the prompt `working-agreement`, so any MCP client can read
+the rules without a file being copied anywhere, and the text cannot describe a version of the
+tools that no longer exists. `make install-agent-skill` adds a stub skill for Claude Code, which
+loads a skill by matching its description but will not auto-invoke a prompt; the stub carries a
+pointer and no rules.
+
+There is deliberately no tool that installs it. Writing into `~/.claude/skills/` would be the
+server reaching into the client's configuration — a much larger privilege than agents have over
+the vault, where they are append-only — and it only appears to work while client and server share
+a filesystem.
+
+Agents working on *this repository* should also load the workflow skill at
+`.claude/skills/mindgraph-workflow/SKILL.md`, which is about building MindGraph rather than using
+it. The file is plain Markdown, so agents
 without Claude-style skills can treat it as their system or project instructions. Its
 important rule is simple: ask `list_ready_tasks`, create or find the work node, mark it
 `doing` with `update_status`, then close it when the work is finished.
