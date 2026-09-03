@@ -7,6 +7,7 @@ import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.LinkOutcome
 import dev.mindgraph.state.NodeSearch
+import dev.mindgraph.state.Retrieval
 import dev.mindgraph.state.TaskGraph
 import java.time.LocalDate
 import kotlinx.coroutines.runBlocking
@@ -68,6 +69,7 @@ interface VaultAccess {
 fun mindGraphTools(vault: VaultAccess): List<McpTool> = listOf(
     listReadyTasksTool(vault),
     searchNotesTool(vault),
+    relatedNotesTool(vault),
     getNodeTool(vault),
     createTaskTool(vault),
     createNoteTool(vault),
@@ -167,6 +169,72 @@ private fun getNodeTool(vault: VaultAccess) = McpTool(
             append("\n")
             append(if (body.isEmpty()) "(no body)" else body)
         }
+    }
+}
+
+private fun relatedNotesTool(vault: VaultAccess) = McpTool(
+    name = "related_notes",
+    description =
+        "Assemble the context for a piece of work as one document. Give it a topic or a node; " +
+            "it finds the starting point, walks the graph outwards, and returns the " +
+            "neighbourhood as markdown you can read straight into your context - nearest " +
+            "first, cut to a token budget, with what did not fit listed at the end. Use this " +
+            "instead of search_notes when you are about to start work and want the background " +
+            "rather than a list of hits: it follows edges rather than matching strings, so a " +
+            "note that never repeats your words still arrives, and it crosses every project.",
+    schema = buildJsonObject {
+        put("type", "object")
+        putJsonObject("properties") {
+            putJsonObject("topic") {
+                put("type", "string")
+                put(
+                    "description",
+                    "What you are about to work on. A node id or exact title is used directly; " +
+                        "anything else is matched against the vault and the best hit is used.",
+                )
+            }
+            putJsonObject("hops") {
+                put("type", "integer")
+                put(
+                    "description",
+                    "How far to walk from the starting node. Default ${Retrieval.DEFAULT_HOPS}, " +
+                        "maximum ${Retrieval.MAX_HOPS}. Raise it for background, lower it to stay tight.",
+                )
+            }
+            putJsonObject("budget_tokens") {
+                put("type", "integer")
+                put(
+                    "description",
+                    "About how much of your context to spend. Approximate - measured in " +
+                        "characters at roughly ${Retrieval.CHARACTERS_PER_TOKEN} per token. " +
+                        "Default ${Retrieval.DEFAULT_BUDGET_CHARACTERS / Retrieval.CHARACTERS_PER_TOKEN}.",
+                )
+            }
+        }
+        putJsonArray("required") { add("topic") }
+        put("additionalProperties", false)
+    },
+) { arguments ->
+    val topic = arguments.requiredString("topic")
+    val hops = arguments.optionalInt("hops") ?: Retrieval.DEFAULT_HOPS
+    val budgetTokens = arguments.optionalInt("budget_tokens")
+    val budget = budgetTokens?.let { it * Retrieval.CHARACTERS_PER_TOKEN }
+        ?: Retrieval.DEFAULT_BUDGET_CHARACTERS
+
+    runBlocking {
+        val nodes = vault.nodes()
+        if (nodes.isEmpty()) throw IllegalStateException("The vault is empty; there is no context to assemble.")
+
+        // An id or exact title is what the caller meant. Anything else is a topic, and the
+        // search that already exists is a better matcher than a second one written here.
+        val seed = runCatching { resolve(nodes, topic) }.getOrElse {
+            NodeSearch.search(nodes, topic, limit = 1).firstOrNull()?.node
+                ?: throw IllegalArgumentException(
+                    "Nothing in the vault matches \"$topic\". Try search_notes with a broader term.",
+                )
+        }
+
+        Retrieval.markdown(Retrieval.bundle(nodes, seed, hops, budget))
     }
 }
 
@@ -618,6 +686,10 @@ private fun JsonObject.optionalDueDate(): String? {
         )
     return parsed.toString()
 }
+
+/** An optional whole number, ignoring anything that is not one rather than failing the call. */
+private fun JsonObject.optionalInt(key: String): Int? =
+    this[key]?.jsonPrimitive?.contentOrNull?.trim()?.toIntOrNull()
 
 private fun JsonObject.requiredString(key: String): String {
     val value = this[key]?.jsonPrimitive?.contentOrNull?.trim().orEmpty()
