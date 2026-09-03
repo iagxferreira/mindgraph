@@ -129,7 +129,9 @@ class McpRelatedNotesTest {
         }
 
         val text = call("related_notes", mapOf("topic" to "Project", "budget_tokens" to "500")).text()
-        assertTrue(text.length <= 500 * 4 + 800, "document was ${text.length} chars")
+        // No slack. The earlier version of this assertion allowed 800 characters of headroom,
+        // which is exactly the overshoot it was supposed to catch.
+        assertTrue(text.length <= 500 * 4, "document was ${text.length} chars against a 2000 budget")
         assertTrue(text.contains("Not included"), "what did not fit must be listed")
     }
 

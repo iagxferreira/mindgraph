@@ -126,11 +126,27 @@ class RetrievalTest {
             node("c", body = big, contextFor = listOf("project")),
         )
         val bundle = Retrieval.bundle(nodes, seed(nodes, "project"), budgetCharacters = 4_000)
-
-        assertTrue(bundle.charactersUsed <= 4_000, "used ${bundle.charactersUsed}")
-        assertTrue(bundle.omitted.isNotEmpty(), "something had to be left out")
         val text = Retrieval.markdown(bundle)
+
+        // The rendered document is what the caller pays for, so that is what must fit. Asserting
+        // on the internal counter is how the first version of this overshot by its own header
+        // and omission list without a single test noticing.
+        assertTrue(text.length <= 4_000, "document was ${text.length} chars against a 4000 budget")
+        assertEquals(text.length, bundle.charactersUsed, "the reported size must be the real one")
+        assertTrue(bundle.omitted.isNotEmpty(), "something had to be left out")
         assertTrue(text.contains("Not included (${bundle.omitted.size})"), text.takeLast(400))
+    }
+
+    @Test
+    fun theBudgetCoversTheHeaderAndTheOmissionListToo() {
+        // The furniture of the document is not free.
+        val nodes = listOf(node("project", body = "seed")) +
+            (1..12).map { node("n$it", body = "q".repeat(900), contextFor = listOf("project")) }
+
+        for (budget in listOf(1_000, 2_500, 6_000, 12_000)) {
+            val text = Retrieval.markdown(Retrieval.bundle(nodes, seed(nodes, "project"), budgetCharacters = budget))
+            assertTrue(text.length <= budget, "budget $budget produced ${text.length} chars")
+        }
     }
 
     @Test

@@ -107,8 +107,16 @@ object Retrieval {
      * Fills the budget nearest-first and stops, rather than trimming every node a little.
      *
      * Half of each of ten documents is ten documents nobody can act on. A whole nearest note and
-     * an honest count of what did not fit is more useful than a uniformly truncated smear — and
+     * an honest count of what did not fit is more useful than a uniformly truncated smear - and
      * the caller can raise the budget or narrow the topic once it knows what it is missing.
+     *
+     * The budget is measured against the **rendered document**, header and omission list
+     * included, because that is what the caller pays for. Counting only the node bodies is how a
+     * budget quietly overshoots by the size of its own furniture.
+     *
+     * One exception, deliberate: the seed is never cut. A bundle that truncates the thing you
+     * asked about has spent its budget on the one document the caller already knew it needed, so
+     * a tiny budget yields a document over it rather than a useless one under it.
      */
     fun bundle(
         nodes: List<Node>,
@@ -118,35 +126,30 @@ object Retrieval {
     ): Bundle {
         val budget = budgetCharacters.coerceIn(MIN_BUDGET_CHARACTERS, MAX_BUDGET_CHARACTERS)
         val candidates = gather(nodes, seed, hops)
-
-        // The seed is always whole: a bundle that truncates the thing you asked about has
-        // spent its budget on the one document the caller already knew it needed.
-        var used = render(seed, Included(seed, 0, Reason.Seed)).length
         val included = mutableListOf<Included>()
-        val omitted = mutableListOf<Node>()
 
-        for (candidate in candidates) {
-            if (omitted.isNotEmpty()) {
-                omitted.add(candidate.node)
-                continue
-            }
-            val whole = render(seed, candidate)
-            if (used + whole.length <= budget) {
+        for ((index, candidate) in candidates.withIndex()) {
+            // Measured against the worst case: everything after this is omitted, so the omission
+            // list is at its longest. Otherwise the last node accepted pushes the footer over.
+            val rest = candidates.drop(index + 1).map { it.node }
+            if (lengthOf(seed, included + candidate, rest) <= budget) {
                 included.add(candidate)
-                used += whole.length
                 continue
             }
-            // Room for a useful piece of it? Otherwise stop — and everything after is omitted.
-            val remaining = budget - used
-            if (remaining >= MIN_USEFUL_EXCERPT) {
-                val cut = candidate.copy(whole = false)
-                included.add(cut)
-                used += render(seed, cut).length
+            val excerpt = candidate.copy(whole = false)
+            if (lengthOf(seed, included + excerpt, rest) <= budget) {
+                included.add(excerpt)
             }
-            omitted.add(candidate.node)
+            break
         }
-        return Bundle(seed, included, omitted, used)
+
+        val includedIds = included.mapTo(HashSet()) { it.node.id }
+        val omitted = candidates.map { it.node }.filterNot { it.id in includedIds }
+        return Bundle(seed, included, omitted, lengthOf(seed, included, omitted))
     }
+
+    private fun lengthOf(seed: Node, included: List<Included>, omitted: List<Node>): Int =
+        markdown(Bundle(seed, included, omitted, 0)).length
 
     /** The bundle as one markdown document, which is the thing an agent actually consumes. */
     fun markdown(bundle: Bundle): String = buildString {
