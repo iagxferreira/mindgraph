@@ -66,6 +66,7 @@ in a file you will notice later.
 | `list_ready_tasks` | What can actually be started now, ranked. The question to ask first |
 | `search_notes` | Find nodes by title, alias, or body text, with a context snippet |
 | `related_notes` | The context for a piece of work, as one document cut to a token budget |
+| `suggest_links` | Edges the vault has evidence for and does not have. Proposes only |
 | `get_node` | Read one node in full when a ready-task summary is not enough |
 | `create_task` | Capture, with an optional deadline |
 | `create_note` | Capture what is *not* work — a note, RFC or reference, with no status |
@@ -73,7 +74,7 @@ in a file you will notice later.
 | `link_nodes` | `depends_on`, `relates_to`, or `context_for`. Cycles are refused |
 | `update_status` | `todo` / `doing` / `done` / `dropped`, and what the change unblocked |
 
-Nine tools, kept deliberately few: every schema is sent on every request of every
+Ten tools, kept deliberately few: every schema is sent on every request of every
 session, so the surface is the loop — orient, load context, capture, structure, close —
 and nothing else. Destructive and fiddly operations stay in the app, where you can see
 what you are doing.

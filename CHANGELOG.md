@@ -6,6 +6,22 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **`suggest_links` — the edges the vault has evidence for and does not have.** An imported vault
+  arrives with its notes and almost none of its connections, and a graph whose value is its edges
+  cannot be filled in by hand at 465 nodes. Two signals: a `[[link]]` written to a name that never
+  resolved, and one note naming another in prose with no edge between them. Ask it about a node
+  for a handful, or sweep the whole vault. There is a chip in the editor that lists a few and
+  links the ones you accept.
+
+  Volume was the design problem rather than recall — measured on a real vault, a four character
+  name floor offers 1010 pairs and eight offers 362 — so names must be long enough not to match by
+  coincidence, matched on word boundaries, and unambiguous: forty-nine notes here are called
+  `index`, and a suggestion that cannot say which one it means is not a suggestion. Each one
+  states its reason in words rather than a score, because a number invites trust without
+  understanding.
+
+  It suggests and never links. An edge is a claim about meaning, so a person makes it.
+
 - **Import any folder of markdown.** The node list can now take a directory — a repository's
   `docs/adr`, an Obsidian vault, a folder of RFCs — choosing what kind the documents are and which
   project they belong to. Both are guessed from the path and shown before anything is written: a
