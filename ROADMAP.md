@@ -58,9 +58,15 @@ what that document contains rather than only deriving it.
 ## After That
 
 - Restoring archived nodes from the node list, and sorting it by more than recency.
-- Packaging (`packageDeb`/`packageMsi`/`packageDmg`) so the app outlives the terminal
-  that launched it, and registering the MCP server at user scope so agents in other
-  repositories can reach the graph.
+- Registering the MCP server at user scope so agents in other repositories can reach the
+  graph. Packaging has landed — `make package` builds an installer for the host and the app
+  runs from the applications menu — but an agent in another repository still cannot reach
+  the vault, which is the half that makes it a cross-project brain in practice.
+
+- A desktop entry jpackage can generate on its own. Today `make install-desktop-entry`
+  installs one by hand, because jpackage files its own entry through a root-run
+  `xdg-desktop-menu` call that lands it in root's home, and it cannot declare the
+  `StartupWMClass` the launcher needs to match a window to it.
 
 ## Later
 

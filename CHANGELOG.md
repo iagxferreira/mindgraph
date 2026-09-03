@@ -6,6 +6,23 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **MindGraph installs as a real desktop app.** `make package` builds a native installer for
+  the host — an RPM was added alongside Deb, Msi and Dmg, since Fedora had no installable
+  artifact despite being the machine this is developed on. The package bundles its own Java
+  runtime, so it does not break when a system JDK is upgraded or removed, and it appears in the
+  applications menu with its own icon.
+
+  Three things had to be got right and each failed first: the jlinked runtime shipped without
+  `jdk.httpserver` and the installed app crashed on launch, because jlink cannot see a class
+  reached only by name; `menuGroup` labels a menu entry but does not create one, so the app
+  installed correctly and was invisible; and the desktop cannot match a window to an entry
+  without `StartupWMClass`, so the icon reverted to a generic one the moment the app opened.
+  jpackage cannot declare that last one, so the entry is written by hand in `packaging/` and
+  installed with `make install-desktop-entry`.
+
+- **The logo, used as the app icon and the brand mark.** Generated for each platform from one
+  source, and shown in the nav rail in place of the letter it stood in for.
+
 - **`related_notes` over MCP — context as a document, not a list of hits.** Give it a topic and
   it finds the starting node, walks the graph outwards and returns the neighbourhood as one
   markdown document to read straight into context: nearest first, a curated `context_for` link
