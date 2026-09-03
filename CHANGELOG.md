@@ -6,6 +6,19 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **`context_for` edges — the first half of the context builder.** A project is a node, and its
+  context is its edges: starting one means creating a node and linking in what an agent should
+  load before working on it. Deliberately not `relates_to` — "these two ideas are related" is not
+  "load this first", and reusing association would put every incidental link into the bundle,
+  which is how a context window fills with things nobody chose. The edge is held on the node that
+  *is* the context, so a note copied out of the vault still says what it was for and one note can
+  brief several projects without being duplicated. Never inferred from a `[[wikilink]]`.
+
+  It is drawn on the canvas in its own hue, offered in the link dialog as an explained choice
+  rather than an unlabelled third button, and available over MCP: `link_nodes` takes
+  `context_for`, and `get_node` reports both what a note serves and — the useful direction — the
+  bundle to load when starting on it.
+
 - **A control that hides node labels.** At vault scale the canvas drew a title under every
   node and they overlapped into noise. The Graph tab's action rail can now turn them off, so
   the shape of the graph reads without the text; selecting a node still names it in the card,
