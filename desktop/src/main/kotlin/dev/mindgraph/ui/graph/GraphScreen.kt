@@ -81,9 +81,13 @@ fun GraphScreen(
     var viewResetKey by remember { mutableStateOf(0) }
     var mode by remember { mutableStateOf(LayoutMode.Mind) }
     var kindFilter by remember { mutableStateOf<NodeKind?>(null) }
+    // The graph opens at its quietest and is opened up from there. At vault scale the default
+    // view was one nobody wanted: every finished task, every archived node, and a title drawn
+    // under all of them, so the first three actions on every visit were to turn things off.
+    // Live work, shape first, text on demand.
     var showArchived by remember { mutableStateOf(false) }
-    var hideDone by remember { mutableStateOf(false) }
-    var showLabels by remember { mutableStateOf(true) }
+    var hideDone by remember { mutableStateOf(true) }
+    var showLabels by remember { mutableStateOf(false) }
 
     val graph = viewModel.graph
 
@@ -190,10 +194,11 @@ fun GraphScreen(
                     counts = kindCounts,
                     onSelect = { kindFilter = it },
                 )
-                CountsPill(
+                    CountsPill(
                     nodeCount = visible.nodes.size,
                     edgeCount = visible.edges.size,
                     readyCount = graph.readyTasks().size,
+                    hiddenCount = viewModel.visibleNodes.size - visible.nodes.size,
                 )
             }
         }
@@ -472,7 +477,7 @@ private fun FlowEmptyState(looseCount: Int, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun CountsPill(nodeCount: Int, edgeCount: Int, readyCount: Int) {
+private fun CountsPill(nodeCount: Int, edgeCount: Int, readyCount: Int, hiddenCount: Int) {
     Row(
         modifier = Modifier
             .clip(RoundedCornerShape(10.dp))
@@ -484,6 +489,11 @@ private fun CountsPill(nodeCount: Int, edgeCount: Int, readyCount: Int) {
         Text("$nodeCount nodes · $edgeCount links", style = MaterialTheme.typography.labelSmall, color = TextMuted)
         if (readyCount > 0) {
             Text("$readyCount ready", style = MaterialTheme.typography.labelSmall, color = Accent)
+        }
+        // Now that the graph opens filtered, a quiet canvas has two explanations and only one of
+        // them is a problem. Saying how many are held back tells them apart.
+        if (hiddenCount > 0) {
+            Text("$hiddenCount hidden", style = MaterialTheme.typography.labelSmall, color = TextMuted)
         }
     }
 }
