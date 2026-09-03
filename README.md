@@ -31,7 +31,7 @@ Built with Kotlin and Compose Multiplatform for Desktop, in `desktop/`.
 
 ![The graph in Cluster mode, grouped into named rings per repository](assets/screenshots/graph-cluster.png)
 
-<sub>Cluster mode: one vault, grouped by the repository each note came from. Thirteen projects that could never
+<sub>Cluster mode: one vault, grouped by the repository each note came from. A dozen projects that could never
 read each other, and "This vault" for the work done here.</sub>
 
 ## The idea
@@ -182,14 +182,14 @@ when done work is hidden, so a live task keeps the visible reason it sits where 
 
 ![Flow mode: dependency trees over tasks, with finished prerequisites faded](assets/screenshots/graph-flow.png)
 
-<sub>Nineteen tasks that have an order, drawn as trees. Fifty-nine unlinked tasks are counted
-rather than scattered across the canvas, and the faded nodes are finished prerequisites holding
-their chains together.</sub>
+<sub>The tasks that have an order, drawn as trees. Unlinked tasks are counted on the pill rather than
+scattered across the canvas, the faded nodes are finished prerequisites holding their chains
+together, and the dotted line is a `context_for` edge.</sub>
 
 ![Mind mode: the whole vault as a force-directed graph](assets/screenshots/graph-mind.png)
 
-<sub>Mind mode with labels turned off — the shape of the vault without the text. Shape is kind,
-colour is task state, size is tracked time.</sub>
+<sub>Mind mode with labels on. Shape is kind, colour is task state, size is tracked time — and the
+control rail can turn the text off when the shape is what you want to read.</sub>
 
 **Kinds you can see at a glance.** A node is a note, an RFC, or a reference — drawn as
 a circle, a diamond, or a square. Shape rather than colour, because colour already
