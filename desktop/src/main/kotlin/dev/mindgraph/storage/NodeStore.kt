@@ -153,6 +153,7 @@ class NodeStore(private val vault: Vault) {
             assignee = frontmatter.string(KEY_ASSIGNEE)?.trim()?.takeIf { it.isNotEmpty() },
             aliases = readAliases(frontmatter),
             originProject = frontmatter.string(KEY_ORIGIN_PROJECT)?.trim()?.takeIf { it.isNotEmpty() },
+            origin = frontmatter.string(MemoryImport.KEY_ORIGIN)?.trim()?.takeIf { it.isNotEmpty() },
             task = status?.let {
                 TaskFacet(
                     status = it,
@@ -190,6 +191,7 @@ class NodeStore(private val vault: Vault) {
                 add("$KEY_ALIASES: [${node.aliases.joinToString(", ") { Frontmatter.quote(it) }}]")
             }
             node.originProject?.let { add("$KEY_ORIGIN_PROJECT: ${Frontmatter.quote(it)}") }
+            node.origin?.let { add("${MemoryImport.KEY_ORIGIN}: ${Frontmatter.quote(it)}") }
             node.task?.let { facet ->
                 add("$KEY_STATUS: ${facet.status.name.lowercase()}")
                 facet.due?.let { add("$KEY_DUE: ${Frontmatter.quote(it)}") }
@@ -315,6 +317,9 @@ class NodeStore(private val vault: Vault) {
             KEY_ID, KEY_TITLE, KEY_KIND, KEY_ARCHIVED, KEY_ASSIGNEE, KEY_ALIASES, KEY_ORIGIN_PROJECT,
             KEY_STATUS, KEY_DUE, KEY_COMPLETED,
             KEY_DEPENDS_ON, KEY_RELATES_TO, KEY_CONTEXT_FOR, KEY_CREATED, KEY_UPDATED,
+            // Modelled now, so it must be known or writeNode would emit it twice - once from the
+            // field and once as a preserved extra.
+            MemoryImport.KEY_ORIGIN,
         )
     }
 }

@@ -106,6 +106,63 @@ class ObsidianLinkTest {
     }
 
     @Test
+    fun aPathPicksTheRightNoteWhenTheNameIsAmbiguous() = runTest {
+        // The whole reason Obsidian writes a path. This vault has three notes called `roadmap`
+        // and forty-nine called `index`; resolving to whichever loaded first answers the one
+        // question the path exists to settle.
+        val (store, root) = newStore()
+        write(root, "elixir/roadmap.md", "# Elixir roadmap")
+        write(root, "rust/roadmap.md", "# Rust roadmap")
+        write(root, "index.md", "# Index\n\nSee [[rust/roadmap]].")
+        importAll(store, root)
+
+        val nodes = store.load()
+        val rust = nodes.single { it.title == "Rust roadmap" }
+        assertEquals(rust.id, nodes.toEdges().single().targetId, "the path names which roadmap")
+    }
+
+    @Test
+    fun aPartialPathIsEnoughWhenItIsUnambiguous() = runTest {
+        val (store, root) = newStore()
+        write(root, "estudos/linguagens/elixir/roadmap.md", "# Elixir roadmap")
+        write(root, "rust/roadmap.md", "# Rust roadmap")
+        write(root, "index.md", "# Index\n\nSee [[linguagens/elixir/roadmap]].")
+        importAll(store, root)
+
+        val nodes = store.load()
+        assertEquals(
+            nodes.single { it.title == "Elixir roadmap" }.id,
+            nodes.toEdges().single().targetId,
+        )
+    }
+
+    @Test
+    fun anAmbiguousLeafIsLeftUnresolvedRatherThanGuessed() = runTest {
+        // A guess is better than nothing where there is nothing to be wrong about, and worse
+        // than nothing where there is.
+        val (store, root) = newStore()
+        write(root, "elixir/roadmap.md", "# Elixir roadmap")
+        write(root, "rust/roadmap.md", "# Rust roadmap")
+        write(root, "index.md", "# Index\n\nSee [[somewhere/else/roadmap]].")
+        importAll(store, root)
+
+        val nodes = store.load()
+        assertTrue(nodes.toEdges().isEmpty(), "two notes could match; neither should be picked")
+        assertEquals(
+            listOf("somewhere/else/roadmap"),
+            WikiLinks.unresolved(nodes.single { it.title == "Index" }.body, nodes),
+        )
+    }
+
+    @Test
+    fun theOriginSurvivesALoad() = runTest {
+        val (store, root) = newStore()
+        val file = write(root, "a/b/note.md", "# Note")
+        importAll(store, root)
+        assertEquals(file.toAbsolutePath().toString(), store.load().single().origin)
+    }
+
+    @Test
     fun anExactNameStillBeatsTheLeafOfAPath() = runTest {
         // The full string is tried first, so a note genuinely called "a/b" is not shadowed.
         val (store, root) = newStore()

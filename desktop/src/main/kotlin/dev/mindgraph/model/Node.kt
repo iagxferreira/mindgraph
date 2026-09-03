@@ -41,6 +41,14 @@ data class Node(
      */
     val originProject: String? = null,
     /**
+     * The absolute path a node was imported from, when it was imported.
+     *
+     * Modelled rather than left as preserved frontmatter because resolution needs it: a vault
+     * that links by path — `[[estudos/elixir/roadmap]]` — is naming a file, and the only record
+     * of which file that is lives here. Absent for everything written in the app.
+     */
+    val origin: String? = null,
+    /**
      * Put away, but kept. Archiving is about visibility, not outcome — which is why it is not
      * a fifth [TaskStatus]: archiving a finished task must not overwrite the fact that it was
      * finished rather than abandoned.
