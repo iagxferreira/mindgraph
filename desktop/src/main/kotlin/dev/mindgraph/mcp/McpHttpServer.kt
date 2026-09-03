@@ -51,6 +51,20 @@ class McpHttpServer(
             // Loud on stderr, fatal to nothing. The app is still a perfectly good app without MCP.
             System.err.println("MindGraph: could not start the MCP server on port $port: ${e.message}")
             false
+        } catch (e: LinkageError) {
+            // A packaged build whose runtime image was jlinked without `jdk.httpserver` cannot
+            // load HttpServer at all, and a missing class arrives as an Error rather than an
+            // Exception - so the IOException arm above let it past and it reached the user as a
+            // fatal dialog reading `com.sun.net.httpserver.HttpServer`.
+            //
+            // The rule this class already stated is the right one: no MCP is a degraded app, not
+            // a broken one. It has to hold for a runtime missing the module as well as for a
+            // port already in use.
+            System.err.println(
+                "MindGraph: the MCP server is unavailable in this build - the Java runtime is " +
+                    "missing ${e.message}. The app works; agents cannot reach it.",
+            )
+            false
         }
     }
 
