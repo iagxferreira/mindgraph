@@ -6,6 +6,24 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **Workspaces — saved selections over the one vault.** A workspace narrows what you are looking
+  at; it never partitions. Edges cross it, retrieval ignores it, and nothing is copied or moved,
+  because the moment a workspace becomes separate storage a vault that spans every project turns
+  back into the per-project silos this exists to replace.
+
+  Membership is a rule *and* a correction, because neither works alone: a rule cannot say "and
+  also these three notes", and a hand-written list cannot cover 337. Rules use only axes the vault
+  already has — the folder something was imported from, its project, its kind, or a `context_for`
+  edge — so a workspace can be made today rather than after tagging every node.
+
+  The folder rule is the useful one. An import attributes everything to one project name, so 337
+  Obsidian notes arrived labelled `obsidian-main` when the nine folders inside were what someone
+  had actually maintained for years. Those are recovered from the source paths already stored on
+  each node, without re-importing, and offered in the switcher with their counts.
+
+  A workspace is itself a node: versioned with the vault, portable, linkable, describable in its
+  own body, and needing no storage layer that did not already exist.
+
 - **`suggest_links` — the edges the vault has evidence for and does not have.** An imported vault
   arrives with its notes and almost none of its connections, and a graph whose value is its edges
   cannot be filled in by hand at 465 nodes. Two signals: a `[[link]]` written to a name that never
