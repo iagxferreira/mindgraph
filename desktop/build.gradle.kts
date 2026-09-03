@@ -51,7 +51,11 @@ compose.desktop {
             vendor = "Iago Ferreira"
             licenseFile.set(rootProject.file("../LICENSE"))
 
+            // jpackage wants a different format per platform, and silently falls back to a
+            // generic Java icon if the file is missing or the wrong type - so each is set
+            // explicitly and generated from the one source logo.
             linux {
+                iconFile.set(project.file("../assets/icon/mindgraph.png"))
                 // Without this the launcher is named after the main class rather than the app.
                 packageName = "mindgraph"
                 menuGroup = "Development"
@@ -60,6 +64,15 @@ compose.desktop {
                 // licenseFile only ships the text; the RPM License tag is separate, and without
                 // it the package reports "Unknown" to anyone inspecting what they installed.
                 rpmLicenseType = "MIT"
+            }
+
+            windows {
+                iconFile.set(project.file("../assets/icon/mindgraph.ico"))
+            }
+
+            macOS {
+                iconFile.set(project.file("../assets/icon/mindgraph.icns"))
+                bundleID = "dev.mindgraph.desktop"
             }
         }
     }
