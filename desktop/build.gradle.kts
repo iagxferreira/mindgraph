@@ -56,6 +56,11 @@ compose.desktop {
             // explicitly and generated from the one source logo.
             linux {
                 iconFile.set(project.file("../assets/icon/mindgraph.png"))
+                // jpackage installs the .desktop file inside the install directory and stops
+                // there unless asked for a shortcut, and desktop environments only scan the XDG
+                // application directories - so without this the app installs correctly and is
+                // invisible in the launcher. menuGroup alone does not imply it.
+                shortcut = true
                 // Without this the launcher is named after the main class rather than the app.
                 packageName = "mindgraph"
                 menuGroup = "Development"
