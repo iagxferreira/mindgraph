@@ -118,7 +118,7 @@ class McpHttpServerTest {
             .jsonObject["result"]!!.jsonObject["tools"]!!.jsonArray
         assertEquals(
             listOf(
-                "list_ready_tasks", "search_notes", "related_notes", "get_node", "create_task", "create_note",
+                "list_ready_tasks", "search_notes", "related_notes", "suggest_links", "get_node", "create_task", "create_note",
                 "append_node_body", "link_nodes", "update_status",
             ),
             tools.map { it.jsonObject["name"]!!.jsonPrimitive.content },

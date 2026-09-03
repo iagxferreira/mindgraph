@@ -6,6 +6,7 @@ import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.LinkOutcome
+import dev.mindgraph.state.LinkSuggestions
 import dev.mindgraph.state.NodeSearch
 import dev.mindgraph.state.Retrieval
 import dev.mindgraph.state.TaskGraph
@@ -70,6 +71,7 @@ fun mindGraphTools(vault: VaultAccess): List<McpTool> = listOf(
     listReadyTasksTool(vault),
     searchNotesTool(vault),
     relatedNotesTool(vault),
+    suggestLinksTool(vault),
     getNodeTool(vault),
     createTaskTool(vault),
     createNoteTool(vault),
@@ -77,6 +79,73 @@ fun mindGraphTools(vault: VaultAccess): List<McpTool> = listOf(
     linkNodesTool(vault),
     updateStatusTool(vault),
 )
+
+private fun suggestLinksTool(vault: VaultAccess) = McpTool(
+    name = "suggest_links",
+    description =
+        "Find edges the vault has evidence for and does not have: notes that name each other " +
+            "in prose without linking, and `[[links]]` written to a name that never resolved. " +
+            "Give it a node to ask what that one should connect to, or omit it to sweep the " +
+            "whole vault. It proposes only - create the edge with link_nodes if the suggestion " +
+            "is right, and ignore it if it is not.",
+    schema = buildJsonObject {
+        put("type", "object")
+        putJsonObject("properties") {
+            putJsonObject("node") {
+                put("type", "string")
+                put(
+                    "description",
+                    "The node to find connections for: its id, or its exact title. Omit to " +
+                        "sweep the whole vault, which is a much longer list.",
+                )
+            }
+            putJsonObject("limit") {
+                put("type", "integer")
+                put("description", "How many to return. Default ${LinkSuggestions.DEFAULT_LIMIT}.")
+            }
+        }
+        putJsonArray("required") { }
+        put("additionalProperties", false)
+    },
+) { arguments ->
+    val reference = arguments["node"]?.jsonPrimitive?.contentOrNull?.trim()?.takeIf { it.isNotEmpty() }
+    val limit = arguments.optionalInt("limit") ?: LinkSuggestions.DEFAULT_LIMIT
+
+    runBlocking {
+        val nodes = vault.nodes()
+        val suggestions = if (reference == null) {
+            LinkSuggestions.across(nodes, limit)
+        } else {
+            LinkSuggestions.forNode(nodes, resolve(nodes, reference), limit)
+        }
+
+        if (suggestions.isEmpty()) {
+            val scope = reference?.let { "\"$it\"" } ?: "the vault"
+            "No unlinked connections found for $scope. Either everything with evidence behind " +
+                "it is already linked, or the notes do not mention each other by name."
+        } else {
+            buildString {
+                append("${suggestions.size} suggested link(s)")
+                reference?.let { append(" for \"$it\"") }
+                append(":\n")
+                suggestions.forEach { suggestion ->
+                    val why = when (suggestion.reason) {
+                        // Said plainly, because a suggestion whose reason cannot be read is one
+                        // the caller has to take on trust.
+                        LinkSuggestions.Reason.DanglingLink ->
+                            "links to \"${suggestion.evidence}\", which resolves to nothing"
+
+                        LinkSuggestions.Reason.UnlinkedMention ->
+                            "says \"${suggestion.evidence}\" without linking it"
+                    }
+                    append("- \"${suggestion.from.title}\" $why\n")
+                    append("    -> \"${suggestion.to.title}\" (${suggestion.to.id.value})\n")
+                }
+                append("\nNothing was linked. Use link_nodes for the ones that are right.")
+            }
+        }
+    }
+}
 
 private fun getNodeTool(vault: VaultAccess) = McpTool(
     name = "get_node",
