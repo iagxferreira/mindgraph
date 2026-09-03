@@ -19,6 +19,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Download
+import androidx.compose.material.icons.outlined.FolderOpen
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Unarchive
 import androidx.compose.material3.Button
@@ -47,11 +48,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import java.nio.file.Path
+import javax.swing.JFileChooser
 import dev.mindgraph.model.Node
 import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.state.AppViewModel
+import dev.mindgraph.storage.FolderImport
 import dev.mindgraph.ui.shell.KindFilterBar
 import dev.mindgraph.ui.shell.DoneFilterToggle
 import dev.mindgraph.ui.shell.KindGlyph
@@ -107,6 +111,7 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
     var kindFilter by remember { mutableStateOf<NodeKind?>(null) }
     var hideDone by remember { mutableStateOf(true) }
     var showArchived by remember { mutableStateOf(false) }
+    var pendingFolder by remember { mutableStateOf<Path?>(null) }
 
     val filteredNodes = viewModel.nodes.filter {
         it.archived == showArchived &&
@@ -141,6 +146,7 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
             TextButton(onClick = { viewModel.createNode() }) { Text("New", color = Accent) }
             ImportMemoryButton(onImport = { viewModel.importClaudeContext() })
             ImportCodexButton(onImport = { viewModel.importCodexAgents() })
+            ImportFolderButton(onPick = { pendingFolder = chooseFolder() })
             DoneFilterToggle(hideDone = hideDone, onToggle = { hideDone = !hideDone })
             ArchiveFilterMenu(showArchived = showArchived, onChange = { showArchived = it })
         }
@@ -171,6 +177,21 @@ private fun NodeList(viewModel: AppViewModel, modifier: Modifier = Modifier) {
                 }
             }
         }
+    }
+
+    pendingFolder?.let { folder ->
+        // Counted before asking rather than after importing: "this folder has 194 files" is the
+        // one fact that changes whether you want to go ahead.
+        val fileCount = remember(folder) { FolderImport.scan(folder).size }
+        FolderImportDialog(
+            folder = folder,
+            fileCount = fileCount,
+            onDismiss = { pendingFolder = null },
+            onConfirm = { kind, project ->
+                viewModel.importFolder(folder, kind, project)
+                pendingFolder = null
+            },
+        )
     }
 }
 
@@ -251,6 +272,44 @@ private fun ImportMemoryButton(onImport: () -> Unit) {
                 tint = TextMuted,
             )
         }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun ImportFolderButton(onPick: () -> Unit) {
+    val description = "Import a folder of markdown"
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(description) } },
+        state = rememberTooltipState(),
+    ) {
+        IconButton(onClick = onPick) {
+            Icon(
+                imageVector = Icons.Outlined.FolderOpen,
+                contentDescription = description,
+                tint = TextMuted,
+            )
+        }
+    }
+}
+
+/**
+ * A directory chooser, on the Swing toolkit Compose Desktop already runs on.
+ *
+ * Blocking is correct here: it is a modal file dialog, and the person cannot do anything else in
+ * the window until it closes anyway.
+ */
+private fun chooseFolder(): Path? {
+    val chooser = JFileChooser(System.getProperty("user.home")).apply {
+        fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
+        dialogTitle = "Choose a folder of markdown to import"
+        isMultiSelectionEnabled = false
+    }
+    return if (chooser.showOpenDialog(null) == JFileChooser.APPROVE_OPTION) {
+        chooser.selectedFile?.toPath()
+    } else {
+        null
     }
 }
 
