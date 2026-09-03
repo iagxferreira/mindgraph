@@ -340,6 +340,13 @@ If you use Claude Code, the import button on the node list pulls in
 `~/.claude/projects/*/memory/*.md` — every project's memory notes as one graph, with the
 links between them resolved. It is safe to press again as those notes accumulate.
 
+The folder button beside them imports any directory of markdown — a repository's `docs/adr`, an
+Obsidian vault, a folder of RFCs. It guesses what kind the documents are and which project they
+belong to from the path and shows both before importing, skips vendored and tool directories, and
+copies the files in: the vault owns its copies, `origin` records where each came from, and the
+source folder is never written to. A later edit there does not reach the copy, which is what keeps
+an agent's additions safe.
+
 The adjacent Codex import button pulls in repository instructions from nested `AGENTS.md`
 files under `CODEX_WORKSPACE_ROOT` (defaulting to `~/workspace`). These files are copied as
 read-only context notes, and repeated imports skip paths already present in the vault.

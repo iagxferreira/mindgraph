@@ -6,6 +6,23 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **Import any folder of markdown.** The node list can now take a directory — a repository's
+  `docs/adr`, an Obsidian vault, a folder of RFCs — choosing what kind the documents are and which
+  project they belong to. Both are guessed from the path and shown before anything is written: a
+  folder called `adr` holds RFCs, and `~/workspace/tally/docs/adr` belongs to *tally* rather than
+  to `adr`.
+
+  The files are copied and the vault owns its copies. `origin` records where each came from, the
+  source folder is never written to, and a later edit there does not reach the copy. That is a
+  snapshot rather than a mirror on purpose: agents append to nodes, and re-syncing would have to
+  either discard what an agent added or refuse to run.
+
+  Vendored and tool directories are skipped — `node_modules`, `.git`, `.obsidian`, `.trash`,
+  build output — along with Excalidraw drawings, which are megabytes of JSON wearing a `.md`
+  extension. That is the idea the Codex importer was missing when it imported Next.js's
+  instructions to its own contributors. A file that already carries a MindGraph id is left alone
+  rather than copied under a second identity.
+
 - **The working agreement is served over MCP** as the resource `mindgraph://working-agreement`
   and the prompt `working-agreement`, so an agent in any repository can learn how to use the
   vault without a file being installed. Deliberately not a tool that writes into `~/.claude/` —
