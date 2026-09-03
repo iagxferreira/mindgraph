@@ -158,7 +158,10 @@ class McpDispatcherTest {
     fun anUnknownMethodIsRejected() {
         val (dispatcher, _) = newFixture()
 
-        val error = dispatcher.handle(request(1, "resources/list"))!!["error"]!!.jsonObject
+        // Deliberately not a real MCP method name. This assertion used `resources/list`, which
+        // then became supported and turned the test into a null dereference rather than a
+        // failure that said what had changed.
+        val error = dispatcher.handle(request(1, "vault/teleport"))!!["error"]!!.jsonObject
 
         assertEquals(McpDispatcher.METHOD_NOT_FOUND, error["code"]!!.jsonPrimitive.content.toInt())
     }

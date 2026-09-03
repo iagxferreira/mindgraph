@@ -10,6 +10,7 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import kotlinx.serialization.json.putJsonObject
 
 /**
@@ -37,6 +38,13 @@ class McpDispatcher(
             "initialize" -> success(id, initialize(request))
             "tools/list" -> success(id, buildJsonObject { put("tools", toolDescriptors()) })
             "tools/call" -> callTool(id, request)
+            // Two protocol slots for the same document, because clients differ in which they
+            // surface: a resource is content a client can read or attach, a prompt is something
+            // a person can invoke by name. Serving both costs one string.
+            "resources/list" -> success(id, buildJsonObject { put("resources", resourceDescriptors()) })
+            "resources/read" -> readResource(id, request)
+            "prompts/list" -> success(id, buildJsonObject { put("prompts", promptDescriptors()) })
+            "prompts/get" -> getPrompt(id, request)
             "ping" -> success(id, JsonObject(emptyMap()))
             else -> failure(id, METHOD_NOT_FOUND, "Unknown method: $method")
         }
@@ -52,12 +60,86 @@ class McpDispatcher(
             put("protocolVersion", requested ?: DEFAULT_PROTOCOL_VERSION)
             putJsonObject("capabilities") {
                 putJsonObject("tools") { put("listChanged", false) }
+                putJsonObject("resources") { put("subscribe", false); put("listChanged", false) }
+                putJsonObject("prompts") { put("listChanged", false) }
             }
             putJsonObject("serverInfo") {
                 put("name", "mindgraph")
                 put("version", serverVersion)
             }
         }
+    }
+
+    private fun resourceDescriptors(): JsonElement = buildJsonArray {
+        add(
+            buildJsonObject {
+                put("uri", McpDocuments.WORKING_AGREEMENT_URI)
+                put("name", McpDocuments.WORKING_AGREEMENT_NAME)
+                put("title", McpDocuments.WORKING_AGREEMENT_TITLE)
+                put("description", McpDocuments.WORKING_AGREEMENT_DESCRIPTION)
+                put("mimeType", "text/markdown")
+            },
+        )
+    }
+
+    private fun readResource(id: JsonElement, request: JsonObject): JsonObject {
+        val uri = request["params"]?.jsonObject?.get("uri")?.jsonPrimitive?.contentOrNull
+        if (uri != McpDocuments.WORKING_AGREEMENT_URI) {
+            // The spec's own code for this, so a client can tell "no such resource" from a
+            // server that is broken.
+            return failure(id, RESOURCE_NOT_FOUND, "Unknown resource: $uri")
+        }
+        return success(
+            id,
+            buildJsonObject {
+                putJsonArray("contents") {
+                    add(
+                        buildJsonObject {
+                            put("uri", McpDocuments.WORKING_AGREEMENT_URI)
+                            put("mimeType", "text/markdown")
+                            put("text", McpDocuments.workingAgreement)
+                        },
+                    )
+                }
+            },
+        )
+    }
+
+    private fun promptDescriptors(): JsonElement = buildJsonArray {
+        add(
+            buildJsonObject {
+                put("name", McpDocuments.WORKING_AGREEMENT_NAME)
+                put("title", McpDocuments.WORKING_AGREEMENT_TITLE)
+                put("description", McpDocuments.WORKING_AGREEMENT_DESCRIPTION)
+                // No arguments: it is one fixed instruction, and an argument would imply the
+                // agreement is negotiable.
+                putJsonArray("arguments") { }
+            },
+        )
+    }
+
+    private fun getPrompt(id: JsonElement, request: JsonObject): JsonObject {
+        val name = request["params"]?.jsonObject?.get("name")?.jsonPrimitive?.contentOrNull
+        if (name != McpDocuments.WORKING_AGREEMENT_NAME) {
+            return failure(id, INVALID_PARAMS, "Unknown prompt: $name")
+        }
+        return success(
+            id,
+            buildJsonObject {
+                put("description", McpDocuments.WORKING_AGREEMENT_DESCRIPTION)
+                putJsonArray("messages") {
+                    add(
+                        buildJsonObject {
+                            put("role", "user")
+                            putJsonObject("content") {
+                                put("type", "text")
+                                put("text", McpDocuments.workingAgreement)
+                            }
+                        },
+                    )
+                }
+            },
+        )
     }
 
     private fun toolDescriptors(): JsonElement = buildJsonArray {
@@ -141,5 +223,8 @@ class McpDispatcher(
         const val INVALID_REQUEST = -32600
         const val METHOD_NOT_FOUND = -32601
         const val INVALID_PARAMS = -32602
+
+        /** The spec's own code, so a client can tell "no such resource" from a broken server. */
+        const val RESOURCE_NOT_FOUND = -32002
     }
 }
