@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=MindGraph
+Comment=A context layer for coding agents, in the shape of a graph you can read.
+Exec=/opt/mindgraph/bin/MindGraph
+Icon=/opt/mindgraph/lib/MindGraph.png
+Terminal=false
+Categories=Development;
+Keywords=graph;notes;agents;mcp;knowledge;
+# The window reports this class, and a desktop entry that does not declare it cannot be matched
+# to the running window - which is why the app appeared in the launcher with its own icon and
+# then switched to a generic one the moment it opened. AWT derives it from the main class, so it
+# changes if dev.mindgraph.MainKt is ever renamed.
+StartupWMClass=dev-mindgraph-MainKt
