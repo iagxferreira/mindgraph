@@ -147,6 +147,22 @@ private fun getNodeTool(vault: VaultAccess) = McpTool(
                 append("\n")
             }
 
+            // Both directions, because they answer different questions. Outgoing says what this
+            // note serves; incoming is the bundle - what an agent starting on this node should
+            // read first - and that is the one worth asking for.
+            val servesAsContext = node.contextFor.mapNotNull { byId[it] }
+            if (servesAsContext.isNotEmpty()) {
+                append("is context for: ")
+                append(servesAsContext.joinToString(", ") { "\"${it.title}\"" })
+                append("\n")
+            }
+            val bundle = nodes.filter { node.id in it.contextFor }
+            if (bundle.isNotEmpty()) {
+                append("context to load (${bundle.size}): ")
+                append(bundle.joinToString(", ") { "\"${it.title}\" (${it.id.value})" })
+                append("\n")
+            }
+
             val body = node.body.trim()
             append("\n")
             append(if (body.isEmpty()) "(no body)" else body)
@@ -353,8 +369,12 @@ private fun linkNodesTool(vault: VaultAccess) = McpTool(
             }
             putJsonObject("kind") {
                 put("type", "string")
-                putJsonArray("enum") { add(DEPENDS_ON); add(RELATES_TO) }
-                put("description", "'depends_on' orders the work; 'relates_to' does not.")
+                putJsonArray("enum") { add(DEPENDS_ON); add(RELATES_TO); add(CONTEXT_FOR) }
+                put(
+                    "description",
+                    "'depends_on' orders the work; 'relates_to' does not; 'context_for' marks " +
+                        "the source as background to load when working on the target.",
+                )
             }
         }
         putJsonArray("required") { add("from"); add("to"); add("kind") }
@@ -366,8 +386,9 @@ private fun linkNodesTool(vault: VaultAccess) = McpTool(
     val kind = when (val raw = arguments.requiredString("kind")) {
         DEPENDS_ON -> EdgeKind.DependsOn
         RELATES_TO -> EdgeKind.RelatesTo
+        CONTEXT_FOR -> EdgeKind.ContextFor
         else -> throw IllegalArgumentException(
-            "kind must be '$DEPENDS_ON' or '$RELATES_TO', not \"$raw\".",
+            "kind must be '$DEPENDS_ON', '$RELATES_TO' or '$CONTEXT_FOR', not \"$raw\".",
         )
     }
 
@@ -377,13 +398,17 @@ private fun linkNodesTool(vault: VaultAccess) = McpTool(
         val target = resolve(nodes, toRef)
 
         when (vault.link(source.id, target.id, kind)) {
-            LinkOutcome.Linked ->
-                if (kind == EdgeKind.DependsOn) {
+            LinkOutcome.Linked -> when (kind) {
+                EdgeKind.DependsOn ->
                     "\"${source.title}\" now depends on \"${target.title}\". It stays blocked " +
                         "until that is done."
-                } else {
-                    "Linked \"${source.title}\" to \"${target.title}\"."
-                }
+
+                EdgeKind.ContextFor ->
+                    "\"${source.title}\" is now context for \"${target.title}\", so it is part " +
+                        "of what gets loaded when working on that."
+
+                EdgeKind.RelatesTo -> "Linked \"${source.title}\" to \"${target.title}\"."
+            }
 
             // Already true is the state the caller wanted, so it is not a failure.
             LinkOutcome.AlreadyLinked ->
@@ -557,6 +582,7 @@ private fun updateStatusTool(vault: VaultAccess) = McpTool(
 
 private const val DEPENDS_ON = "depends_on"
 private const val RELATES_TO = "relates_to"
+private const val CONTEXT_FOR = "context_for"
 private const val DEFAULT_LIMIT = 10
 private const val MAX_NAME = 64
 private const val ASSIGNEE_HINT =
