@@ -35,9 +35,27 @@ compose.desktop {
         mainClass = "dev.mindgraph.MainKt"
 
         nativeDistributions {
-            targetFormats(TargetFormat.Deb, TargetFormat.Dmg, TargetFormat.Msi)
+            // Rpm alongside Deb so the two mainstream Linux families are both covered. jpackage
+            // shells out to the host's packaging tool, so each format only builds on a machine
+            // that has it - rpmbuild for Rpm, dpkg-deb for Deb - and the others are skipped
+            // rather than cross-built.
+            targetFormats(TargetFormat.Deb, TargetFormat.Rpm, TargetFormat.Dmg, TargetFormat.Msi)
             packageName = "MindGraph"
             packageVersion = "1.0.0"
+            description = "A context layer for coding agents, in the shape of a graph you can read."
+            vendor = "Iago Ferreira"
+            licenseFile.set(rootProject.file("../LICENSE"))
+
+            linux {
+                // Without this the launcher is named after the main class rather than the app.
+                packageName = "mindgraph"
+                menuGroup = "Development"
+                // The .desktop entry is keyed on this; changing it later orphans pinned icons.
+                appCategory = "Development"
+                // licenseFile only ships the text; the RPM License tag is separate, and without
+                // it the package reports "Unknown" to anyone inspecting what they installed.
+                rpmLicenseType = "MIT"
+            }
         }
     }
 }
