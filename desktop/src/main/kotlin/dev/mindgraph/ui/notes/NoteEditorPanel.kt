@@ -68,6 +68,8 @@ import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.TaskStatus
 import dev.mindgraph.model.NodeKind
 import dev.mindgraph.state.AppViewModel
+import dev.mindgraph.model.EdgeKind
+import dev.mindgraph.state.LinkSuggestions
 import dev.mindgraph.ui.theme.Accent
 import dev.mindgraph.ui.shell.KindGlyph
 import dev.mindgraph.ui.theme.Blocked
@@ -645,6 +647,10 @@ private fun LinksFooter(
 ) {
     val titleOf = { id: NodeId -> viewModel.nodeById(id)?.title ?: "unknown" }
     val incoming = viewModel.nodes.filter { node.id in it.dependsOn || node.id in it.relatesTo }
+    var showSuggestions by remember(node.id) { mutableStateOf(false) }
+    val suggestions = remember(node.id, viewModel.nodes) {
+        LinkSuggestions.forNode(viewModel.nodes, node, limit = SUGGESTION_LIMIT)
+    }
 
     Row(
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(8.dp),
@@ -655,6 +661,14 @@ private fun LinksFooter(
             AssistChip(onClick = onCancelLink, label = { Text("Click a node in the graph…") })
         } else {
             AssistChip(onClick = { onStartLink(node.id) }, label = { Text("+ Link") })
+        }
+        // Beside the links rather than in a panel of its own: the question it answers is "what
+        // else belongs on this row", and the answer is acted on by adding a chip to it.
+        if (suggestions.isNotEmpty()) {
+            AssistChip(
+                onClick = { showSuggestions = !showSuggestions },
+                label = { Text("${suggestions.size} suggested") },
+            )
         }
         node.dependsOn.forEach { id ->
             LinkChip(
@@ -672,6 +686,55 @@ private fun LinksFooter(
         }
         incoming.forEach { referrer ->
             LinkChip(label = "← ${referrer.title}", tint = TextMuted, onDelete = null)
+        }
+    }
+
+    if (showSuggestions && suggestions.isNotEmpty()) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            suggestions.forEach { suggestion ->
+                // The other end of the pair: a suggestion is symmetrical, and the useful half is
+                // whichever note is not the one already open.
+                val other = if (suggestion.from.id == node.id) suggestion.to else suggestion.from
+                SuggestedLink(
+                    title = other.title,
+                    reason = when (suggestion.reason) {
+                        LinkSuggestions.Reason.DanglingLink ->
+                            "\"${suggestion.evidence}\" links to nothing"
+
+                        LinkSuggestions.Reason.UnlinkedMention ->
+                            if (suggestion.from.id == node.id) {
+                                "this note says \"${suggestion.evidence}\""
+                            } else {
+                                "that note says \"${suggestion.evidence}\""
+                            }
+                    },
+                    onAccept = { viewModel.link(node.id, other.id, EdgeKind.RelatesTo) },
+                )
+            }
+        }
+    }
+}
+
+/**
+ * One suggestion: what it would link, and why it is being offered.
+ *
+ * The reason is shown rather than a score. A number invites trust without understanding, and the
+ * evidence here is short enough to simply read.
+ */
+@Composable
+private fun SuggestedLink(title: String, reason: String, onAccept: () -> Unit) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        TextButton(onClick = onAccept) { Text("Link", color = Accent) }
+        Column(modifier = Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyMedium, color = TextPrimary, maxLines = 1)
+            Text(reason, style = MaterialTheme.typography.labelSmall, color = TextMuted, maxLines = 1)
         }
     }
 }
@@ -703,3 +766,6 @@ private fun formatDuration(totalSeconds: Long): String {
         "%02d:%02d".format(minutes, seconds)
     }
 }
+
+/** Enough to be worth opening, few enough to read without scrolling past the note itself. */
+private const val SUGGESTION_LIMIT = 6
