@@ -15,9 +15,10 @@ and decisions you already made get quietly re-litigated.
 
 MindGraph makes that context a graph. Every node is a markdown document — a note, an
 **RFC**, or a reference — and a node is *also* a task when it has a status. Edges record
-what depends on what. The running app hosts an MCP server, so agents work that graph
-directly: ask what is ready, read the RFC that governs it, do the work, close it out.
-Time they spend is logged as theirs, next to yours.
+what depends on what, and what is *context for* what. The running app hosts an MCP server,
+so agents work that graph directly: ask what is ready, load the context for it as a single
+budgeted document, do the work, close it out. Time they spend is logged as theirs, next to
+yours.
 
 It also imports the memory your agents already write. Claude Code keeps notes per project
 and structurally cannot read across them; MindGraph pulls every project's into one graph,
@@ -28,9 +29,10 @@ it in a real app rather than by hand-editing what an agent left behind.
 
 Built with Kotlin and Compose Multiplatform for Desktop, in `desktop/`.
 
-![The graph in Mind mode: 85 nodes, including memory imported from seven projects](assets/screenshots/graph-mind.png)
+![The graph in Cluster mode, grouped into named rings per repository](assets/screenshots/graph-cluster.png)
 
-<sub>Every project's agent memory in one graph — the notes on the right came from repositories that could never see each other.</sub>
+<sub>Cluster mode: one vault, grouped by the repository each note came from. Thirteen projects that could never
+read each other, and "This vault" for the work done here.</sub>
 
 ## The idea
 
@@ -57,17 +59,18 @@ in a file you will notice later.
 | --- | --- |
 | `list_ready_tasks` | What can actually be started now, ranked. The question to ask first |
 | `search_notes` | Find nodes by title, alias, or body text, with a context snippet |
+| `related_notes` | The context for a piece of work, as one document cut to a token budget |
 | `get_node` | Read one node in full when a ready-task summary is not enough |
 | `create_task` | Capture, with an optional deadline |
 | `create_note` | Capture what is *not* work — a note, RFC or reference, with no status |
 | `append_node_body` | Add to the end of a node. Only ever adds |
-| `link_nodes` | `depends_on` or `relates_to`. Cycles are refused |
+| `link_nodes` | `depends_on`, `relates_to`, or `context_for`. Cycles are refused |
 | `update_status` | `todo` / `doing` / `done` / `dropped`, and what the change unblocked |
 
-Eight tools, kept deliberately few: every schema is sent on every request of every
-session, so the surface is the loop — orient, capture, structure, close — and nothing
-else. Destructive and fiddly operations stay in the app, where you can see what you
-are doing.
+Nine tools, kept deliberately few: every schema is sent on every request of every
+session, so the surface is the loop — orient, load context, capture, structure, close —
+and nothing else. Destructive and fiddly operations stay in the app, where you can see
+what you are doing.
 
 Point a client at it while the app is running:
 
@@ -96,6 +99,49 @@ set in the window is your work, set over MCP it is the machine's. Nothing is dec
 so the split cannot drift from the truth. An agent can name itself, and the Work screen
 totals it by name.
 
+## Building the context an agent loads
+
+A context window is finite, so the interesting problem is not storing everything — it is
+choosing what to hand over. MindGraph has both halves of that.
+
+**Curate it.** `context_for` is a third kind of edge, next to `depends_on` and
+`relates_to`. It means *load this when working on that*. It is deliberately not
+association: "these two ideas are related" is not "read this first", and reusing
+`relates_to` would sweep every incidental link into the briefing. A project is just a
+node, so starting one means creating it and linking in the pieces that matter. The edge
+lives on the note that *is* the context, so one note can brief several projects without
+being copied, and a note carried out of the vault still says what it was for.
+
+**Load it.** `related_notes` takes a topic, finds the starting node, walks the graph
+outward, and returns the neighbourhood as **one markdown document** — nearest first, a
+curated edge outranking an inferred one at the same distance, cut to a token budget, with
+whatever did not fit listed at the end rather than silently dropped.
+
+```
+related_notes(topic: "rewrite the importer", budget_tokens: 2000)
+```
+
+```markdown
+# Context for: Reorganise importers into one module per agent
+...
+## Duplicate nodes are mostly import bugs, not merge candidates
+id: 01M1J8FJMF98BXHPJPM8BQYDTR · kind: rfc · chosen as context · 1 hop
+...
+---
+## Not included (3)
+Reached by the walk but left out for want of budget.
+```
+
+Two properties matter more than they sound. Edges are walked in **both directions**, so
+a note filed as context for your work is found from the work — the curated case is
+entirely incoming. And the result carries the **bodies** of what it names, not the
+titles: a title is a second lookup, and the test this is built against is handing the
+document to an agent with no memory and expecting it to start.
+
+That last part is borrowed. The idea of deliberately testing your documentation against
+a blank session comes from Dave Rensin's
+[Elephants, Goldfish and the New Golden Age of Software Engineering](https://medium.com/@drensin/elephants-goldfish-and-the-new-golden-age-of-software-engineering-c33641a48874).
+
 ## RFCs that agents actually read
 
 An RFC is a node kind, not a folder convention. Write the design in the app — title,
@@ -122,9 +168,28 @@ the edges to the work it governs — all of it reachable from one `get_node` cal
 
 ## What you get
 
-**One graph, two ways to read it.** Mind mode is force-directed, for associative
-thinking. Flow mode lays dependencies out in ranked columns, because springs scramble
-exactly the ordering a dependency graph exists to show.
+**One graph, three ways to read it.** Mind mode is force-directed, for associative
+thinking. Flow mode draws the dependency trees among your tasks — prerequisites above
+the work waiting on them — because springs scramble exactly the ordering a dependency
+graph exists to show. Cluster mode groups by the repository a note came from, which is
+the axis that makes a cross-project vault legible.
+
+Flow shows only tasks that are actually part of a chain, and says how many it left out.
+A vault has far more loose tasks than linked ones, and a layout that gives every
+unconnected node its own column is a single row thousands of pixels wide with the real
+structure lost inside it. Finished tasks in the middle of a chain stay as faded ghosts
+when done work is hidden, so a live task keeps the visible reason it sits where it does.
+
+![Flow mode: dependency trees over tasks, with finished prerequisites faded](assets/screenshots/graph-flow.png)
+
+<sub>Nineteen tasks that have an order, drawn as trees. Fifty-nine unlinked tasks are counted
+rather than scattered across the canvas, and the faded nodes are finished prerequisites holding
+their chains together.</sub>
+
+![Mind mode: the whole vault as a force-directed graph](assets/screenshots/graph-mind.png)
+
+<sub>Mind mode with labels turned off — the shape of the vault without the text. Shape is kind,
+colour is task state, size is tracked time.</sub>
 
 **Kinds you can see at a glance.** A node is a note, an RFC, or a reference — drawn as
 a circle, a diamond, or a square. Shape rather than colour, because colour already
@@ -188,6 +253,7 @@ kind: note
 status: doing
 due: 2026-09-04
 depends_on: [01M0V4BNNTVG12ZJ9QHSZG0BTB]
+context_for: [01M0V4BPQ7X1KM4ZE8TCJ2WR9D]
 created: 2026-08-24T21:00:00Z
 updated: 2026-08-24T21:00:00Z
 ---
@@ -271,8 +337,10 @@ Or from `desktop/` directly: `./gradlew run`, `./gradlew test`, `./gradlew build
   the `WorkSession` that records who spent the time
 - `storage/` — the markdown vault: frontmatter parsing, the node store, the session log
 - `state/` — `AppViewModel` (the single source of UI state), the graph layout engine,
-  `TaskGraph`, which derives blocked/ready state and ranks what to do next, and the
-  linking, filtering and work-summary rules the UI and the tools share
+  `TaskGraph`, which derives blocked/ready state and ranks what to do next, `Retrieval`,
+  which assembles a context bundle and cuts it to a budget, `FlowForest`, which lays out
+  the dependency trees, and the linking, filtering and work-summary rules the UI and the
+  tools share
 - `mcp/` — the MCP protocol, its loopback HTTP transport, and the tools agents call
 - `ui/` — the nav rail and the Graph, Notes, Tasks, and Work destinations
 
@@ -297,9 +365,16 @@ caller — so an agent cannot build a graph the app would have refused.
 The graph is meant to be the context substrate an agent works from, not a visualization
 bolted onto notes. The agent layer is no longer the plan — it is the current work.
 
-Importing the notes coding agents already write has landed — they sat siloed per project
-and were never readable as one graph. Next is retrieval that follows those edges rather
-than matching strings: `search_notes` to find a foothold, then `related_notes` to walk
-outward, so an agent asking about a topic is handed the neighbourhood around it across
-every project at once. That is the thing per-project memory structurally cannot do, and
-it is what makes the edges pay rent.
+Retrieval has landed, which was the part that had to work for any of the rest to matter.
+`search_notes` finds a foothold by text; `related_notes` walks the edges outward and hands
+back the neighbourhood as one budgeted document, across every project at once. That is the
+thing per-project memory structurally cannot do.
+
+What is not solved yet is knowing whether a bundle is any *good*. A curated context set
+that is missing something looks exactly like a complete one until an agent fails on it, and
+nothing in the app can tell you which you have. Making that visible — rather than adding
+more ways to put notes in — is the next thing worth doing.
+
+After that: merging genuine duplicate nodes, importers reorganised so a new agent's memory
+format is one file rather than a fourth copy of the same orchestration, and packaging so
+the app outlives the terminal that launched it.
