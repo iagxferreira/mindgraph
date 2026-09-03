@@ -58,10 +58,10 @@ what that document contains rather than only deriving it.
 ## After That
 
 - Restoring archived nodes from the node list, and sorting it by more than recency.
-- Registering the MCP server at user scope so agents in other repositories can reach the
-  graph. Packaging has landed — `make package` builds an installer for the host and the app
-  runs from the applications menu — but an agent in another repository still cannot reach
-  the vault, which is the half that makes it a cross-project brain in practice.
+- Packaging and user-scope registration have both landed. `make package` builds an installer
+  for the host, the app runs from the applications menu, and the MCP server is registered at
+  user scope — so an agent working in any repository reaches the same vault. The cross-project
+  claim is now true in practice and not only in principle.
 
 - A desktop entry jpackage can generate on its own. Today `make install-desktop-entry`
   installs one by hand, because jpackage files its own entry through a root-run

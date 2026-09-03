@@ -1,12 +1,18 @@
-# MindGraph
+<p align="center">
+  <img src="assets/icon/mindgraph.png" alt="" width="120">
+</p>
+
+<h1 align="center">MindGraph</h1>
+
+<p align="center">
+  <b>A context layer for coding agents, in the shape of a graph you can read.</b>
+</p>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Kotlin](https://img.shields.io/badge/Kotlin-2.1-7F52FF?logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![Compose Multiplatform](https://img.shields.io/badge/Compose-Multiplatform-4285F4?logo=jetpackcompose&logoColor=white)](https://www.jetbrains.com/compose-multiplatform/)
 [![MCP](https://img.shields.io/badge/MCP-server%20built%20in-000000)](#agents-work-the-graph)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-lightgrey)](#getting-started)
-
-**A context layer for coding agents, in the shape of a graph you can read.**
 
 Coding agents forget between sessions. What they do remember is siloed per project and
 flat — a folder of notes with no ordering, no dependencies, and no way to ask which of
@@ -75,9 +81,13 @@ what you are doing.
 Point a client at it while the app is running:
 
 ```bash
-claude mcp add --transport http mindgraph http://127.0.0.1:4319/mcp
+claude mcp add --scope user --transport http mindgraph http://127.0.0.1:4319/mcp
 codex mcp add mindgraph --url http://127.0.0.1:4319/mcp
 ```
+
+`--scope user` is the part that matters. Registered per project, the graph is reachable only
+from the repository it was registered in — which is the silo MindGraph exists to remove. At user
+scope an agent working in any repository can read the whole vault and record what it did.
 
 Other agents should configure a Streamable HTTP MCP server named `mindgraph` with the
 same URL. The server is loopback-only by default, so agents on another machine need an

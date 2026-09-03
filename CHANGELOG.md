@@ -6,6 +6,10 @@ All notable changes to MindGraph will be tracked in this file.
 
 ### Added
 
+- **The MCP server is registered at user scope**, so an agent working in *any* repository
+  reaches the same vault. Registered per project it was reachable only from the repository it
+  was registered in, which is precisely the silo MindGraph exists to remove.
+
 - **MindGraph installs as a real desktop app.** `make package` builds a native installer for
   the host — an RPM was added alongside Deb, Msi and Dmg, since Fedora had no installable
   artifact despite being the machine this is developed on. The package bundles its own Java
