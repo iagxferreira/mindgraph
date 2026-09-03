@@ -7,6 +7,7 @@ import dev.mindgraph.model.NodeId
 import dev.mindgraph.model.NodeKind
 import dev.mindgraph.model.TaskFacet
 import dev.mindgraph.model.TaskStatus
+import dev.mindgraph.model.Workspace
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
@@ -154,6 +155,7 @@ class NodeStore(private val vault: Vault) {
             aliases = readAliases(frontmatter),
             originProject = frontmatter.string(KEY_ORIGIN_PROJECT)?.trim()?.takeIf { it.isNotEmpty() },
             origin = frontmatter.string(MemoryImport.KEY_ORIGIN)?.trim()?.takeIf { it.isNotEmpty() },
+            workspace = readWorkspace(frontmatter),
             task = status?.let {
                 TaskFacet(
                     status = it,
@@ -192,6 +194,16 @@ class NodeStore(private val vault: Vault) {
             }
             node.originProject?.let { add("$KEY_ORIGIN_PROJECT: ${Frontmatter.quote(it)}") }
             node.origin?.let { add("${MemoryImport.KEY_ORIGIN}: ${Frontmatter.quote(it)}") }
+            node.workspace?.let { workspace ->
+                add("$KEY_WORKSPACE: ${Frontmatter.quote(ruleName(workspace.rule))}")
+                ruleValue(workspace.rule)?.let { add("$KEY_WORKSPACE_VALUE: ${Frontmatter.quote(it)}") }
+                if (workspace.include.isNotEmpty()) {
+                    add("$KEY_WORKSPACE_INCLUDE: [${workspace.include.joinToString(", ") { it.value }}]")
+                }
+                if (workspace.exclude.isNotEmpty()) {
+                    add("$KEY_WORKSPACE_EXCLUDE: [${workspace.exclude.joinToString(", ") { it.value }}]")
+                }
+            }
             node.task?.let { facet ->
                 add("$KEY_STATUS: ${facet.status.name.lowercase()}")
                 facet.due?.let { add("$KEY_DUE: ${Frontmatter.quote(it)}") }
@@ -226,6 +238,49 @@ class NodeStore(private val vault: Vault) {
      * migration, which matters most for an Obsidian vault: it links by filename while titles
      * are headings, so without `documentName` every such link resolves to nothing.
      */
+    /**
+     * The rule written flat rather than nested.
+     *
+     * Frontmatter here is scalars and sequences, and a nested block would need the parser to
+     * grow a shape for one field. Two keys say the same thing and stay hand-editable.
+     */
+    private fun readWorkspace(frontmatter: Frontmatter): Workspace? {
+        val name = frontmatter.string(KEY_WORKSPACE)?.trim()?.lowercase() ?: return null
+        val value = frontmatter.string(KEY_WORKSPACE_VALUE)?.trim().orEmpty()
+        val rule = when (name) {
+            RULE_ORIGIN_UNDER -> value.takeIf { it.isNotEmpty() }?.let { Workspace.Rule.OriginUnder(it) }
+            RULE_IN_PROJECT -> value.takeIf { it.isNotEmpty() }?.let { Workspace.Rule.InProject(it) }
+            RULE_OF_KIND -> NodeKind.parse(value)?.let { Workspace.Rule.OfKind(it) }
+            RULE_CONTEXT_FOR -> value.takeIf(Ulid::looksValid)?.let { Workspace.Rule.ContextFor(NodeId(it)) }
+            RULE_NONE -> Workspace.Rule.Nothing
+            // An unreadable rule selects nothing rather than everything: a workspace that
+            // silently widened to the whole vault would look like it had worked.
+            else -> null
+        } ?: Workspace.Rule.Nothing
+
+        return Workspace(
+            rule = rule,
+            include = frontmatter.list(KEY_WORKSPACE_INCLUDE).filter(Ulid::looksValid).map(::NodeId),
+            exclude = frontmatter.list(KEY_WORKSPACE_EXCLUDE).filter(Ulid::looksValid).map(::NodeId),
+        )
+    }
+
+    private fun ruleName(rule: Workspace.Rule): String = when (rule) {
+        is Workspace.Rule.OriginUnder -> RULE_ORIGIN_UNDER
+        is Workspace.Rule.InProject -> RULE_IN_PROJECT
+        is Workspace.Rule.OfKind -> RULE_OF_KIND
+        is Workspace.Rule.ContextFor -> RULE_CONTEXT_FOR
+        Workspace.Rule.Nothing -> RULE_NONE
+    }
+
+    private fun ruleValue(rule: Workspace.Rule): String? = when (rule) {
+        is Workspace.Rule.OriginUnder -> rule.path
+        is Workspace.Rule.InProject -> rule.project
+        is Workspace.Rule.OfKind -> rule.kind.slug
+        is Workspace.Rule.ContextFor -> rule.nodeId.value
+        Workspace.Rule.Nothing -> null
+    }
+
     private fun readAliases(frontmatter: Frontmatter): List<String> =
         (
             frontmatter.list(KEY_ALIASES) +
@@ -310,8 +365,18 @@ class NodeStore(private val vault: Vault) {
         const val KEY_DEPENDS_ON = "depends_on"
         const val KEY_RELATES_TO = "relates_to"
         const val KEY_CONTEXT_FOR = "context_for"
+        const val KEY_WORKSPACE = "workspace"
+        const val KEY_WORKSPACE_VALUE = "workspaceOf"
+        const val KEY_WORKSPACE_INCLUDE = "workspaceInclude"
+        const val KEY_WORKSPACE_EXCLUDE = "workspaceExclude"
         const val KEY_CREATED = "created"
         const val KEY_UPDATED = "updated"
+
+        const val RULE_ORIGIN_UNDER = "origin_under"
+        const val RULE_IN_PROJECT = "in_project"
+        const val RULE_OF_KIND = "of_kind"
+        const val RULE_CONTEXT_FOR = "context_for"
+        const val RULE_NONE = "none"
 
         val KNOWN_KEYS = setOf(
             KEY_ID, KEY_TITLE, KEY_KIND, KEY_ARCHIVED, KEY_ASSIGNEE, KEY_ALIASES, KEY_ORIGIN_PROJECT,
@@ -320,6 +385,7 @@ class NodeStore(private val vault: Vault) {
             // Modelled now, so it must be known or writeNode would emit it twice - once from the
             // field and once as a preserved extra.
             MemoryImport.KEY_ORIGIN,
+            KEY_WORKSPACE, KEY_WORKSPACE_VALUE, KEY_WORKSPACE_INCLUDE, KEY_WORKSPACE_EXCLUDE,
         )
     }
 }

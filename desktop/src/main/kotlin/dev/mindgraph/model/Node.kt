@@ -49,6 +49,15 @@ data class Node(
      */
     val origin: String? = null,
     /**
+     * Present when this node is also a saved selection over the vault.
+     *
+     * A workspace is a node rather than a settings file: it versions with the vault, travels
+     * with it, can be linked and described in its own body, and needs no storage layer that
+     * does not already exist. Not a fourth [NodeKind] — kind says what a *document* is and is
+     * drawn as shape on the canvas, and a workspace is not a document.
+     */
+    val workspace: Workspace? = null,
+    /**
      * Put away, but kept. Archiving is about visibility, not outcome — which is why it is not
      * a fifth [TaskStatus]: archiving a finished task must not overwrite the fact that it was
      * finished rather than abandoned.
